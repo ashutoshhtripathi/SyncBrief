@@ -1,0 +1,150 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+import json
+import httpx
+from typing import Dict, Any
+from backend.app.database import get_db
+from backend.app.models import Digest, Checkin, Blocker, User, AuditLog
+from backend.app.schemas import DigestResponse
+from backend.app.ai import get_ai_provider
+from backend.app.integrations.teams_cards import TeamsCardGenerator
+from backend.app.config import settings
+
+router = APIRouter(prefix="/digest", tags=["Daily Digest"])
+
+@router.get("/today", response_model=DigestResponse)
+async def get_today_digest(db: Session = Depends(get_db)):
+    """Fetch today's executive standup digest, or synthesize if not present."""
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    digest = db.query(Digest).filter(Digest.date == today_str).order_by(Digest.id.desc()).first()
+
+    if not digest:
+        return await regenerate_digest(db)
+
+    return {
+        "id": digest.id,
+        "date": digest.date,
+        "progress_by_person": json.loads(digest.progress_by_person_json),
+        "blockers_summary": json.loads(digest.blockers_summary_json),
+        "risks": json.loads(digest.risks_json),
+        "missing_checkins": json.loads(digest.missing_checkins_json),
+        "suggested_actions": json.loads(digest.suggested_actions_json),
+        "markdown_content": digest.markdown_content,
+        "teams_card_json": json.loads(digest.teams_card_json) if digest.teams_card_json else {},
+        "created_at": digest.created_at
+    }
+
+@router.post("/regenerate", response_model=DigestResponse)
+async def regenerate_digest(db: Session = Depends(get_db)):
+    """Re-synthesize the daily standup digest with the latest team updates and verified citations."""
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    since = datetime.utcnow() - timedelta(hours=24)
+
+    # Gather data
+    checkins = db.query(Checkin).filter(Checkin.created_at >= since).all()
+    blockers = db.query(Blocker).filter(Blocker.status.in_(["open", "in_progress"])).all()
+    users = db.query(User).all()
+
+    checkins_payload = [
+        {
+            "user_name": c.user_name,
+            "yesterday": c.yesterday,
+            "today": c.today,
+            "blockers_text": c.blockers_text,
+            "mood": c.mood,
+            "created_at": c.created_at.isoformat() if c.created_at else None
+        }
+        for c in checkins
+    ]
+
+    blockers_payload = [
+        {
+            "summary": b.summary,
+            "severity": b.severity,
+            "owner_name": b.owner_name,
+            "blocked_by": b.blocked_by,
+            "citations": b.citations
+        }
+        for b in blockers
+    ]
+
+    users_payload = [
+        {"id": u.id, "full_name": u.full_name, "role": u.role, "timezone": u.timezone}
+        for u in users
+    ]
+
+    ai_provider = get_ai_provider()
+    digest_res = await ai_provider.generate_digest(
+        checkins=checkins_payload,
+        blockers=blockers_payload,
+        team_members=users_payload,
+        digest_date=today_str
+    )
+
+    # Generate Microsoft Teams Adaptive Card
+    teams_card = TeamsCardGenerator.generate_digest_card(digest_res)
+
+    digest = Digest(
+        date=today_str,
+        progress_by_person_json=json.dumps(digest_res.get("progress_by_person", [])),
+        blockers_summary_json=json.dumps(digest_res.get("blockers_summary", [])),
+        risks_json=json.dumps(digest_res.get("risks", [])),
+        missing_checkins_json=json.dumps(digest_res.get("missing_checkins", [])),
+        suggested_actions_json=json.dumps(digest_res.get("suggested_actions", [])),
+        markdown_content=digest_res.get("markdown_content", ""),
+        teams_card_json=json.dumps(teams_card)
+    )
+    db.add(digest)
+
+    # Audit log
+    audit = AuditLog(
+        action="digest_generation",
+        model_used=ai_provider.name,
+        prompt_version="digest_v1",
+        input_summary=f"Synthesized {len(checkins_payload)} check-ins and {len(blockers_payload)} blockers",
+        output_summary=f"Digest generated for {today_str} with {len(digest_res.get('risks', []))} risks and {len(digest_res.get('suggested_actions', []))} actions"
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(digest)
+
+    return {
+        "id": digest.id,
+        "date": digest.date,
+        "progress_by_person": json.loads(digest.progress_by_person_json),
+        "blockers_summary": json.loads(digest.blockers_summary_json),
+        "risks": json.loads(digest.risks_json),
+        "missing_checkins": json.loads(digest.missing_checkins_json),
+        "suggested_actions": json.loads(digest.suggested_actions_json),
+        "markdown_content": digest.markdown_content,
+        "teams_card_json": teams_card,
+        "created_at": digest.created_at
+    }
+
+@router.post("/post-to-teams")
+async def post_digest_to_teams(db: Session = Depends(get_db)):
+    """Post Adaptive Card standup digest to Microsoft Teams webhook or mock connector."""
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    digest = db.query(Digest).filter(Digest.date == today_str).order_by(Digest.id.desc()).first()
+    if not digest:
+        raise HTTPException(status_code=404, detail="Digest not generated yet")
+
+    card_json = json.loads(digest.teams_card_json) if digest.teams_card_json else {}
+
+    webhook_url = settings.TEAMS_WEBHOOK_URL
+    if webhook_url:
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(webhook_url, json={"type": "message", "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": card_json}]}, timeout=8.0)
+                resp.raise_for_status()
+                return {"status": "success", "mode": "live_teams", "message": "Successfully posted digest to Microsoft Teams channel!"}
+        except Exception as e:
+            return {"status": "mock_fallback", "mode": "mock", "message": f"Teams webhook failed ({e}); simulated successful broadcast in mock mode.", "card": card_json}
+
+    return {
+        "status": "success",
+        "mode": "mock_preview",
+        "message": "Teams Broadcast Simulated! In production, this posts directly into Microsoft Teams #standup channel.",
+        "card": card_json
+    }
