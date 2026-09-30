@@ -9,7 +9,10 @@ import {
   AlertTriangle, 
   Sliders, 
   RefreshCw,
-  Zap
+  Zap,
+  Globe,
+  Sparkles,
+  Calculator
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -58,21 +61,29 @@ export const InsightsPage: React.FC = () => {
     { name: 'Low', count: insights.blockers_by_severity.low, color: '#10b981' },
   ] : [];
 
+  const trendData = [
+    { day: 'Mon', hours: (teamSize * 0.5 * 0.9).toFixed(1), compliance: 95 },
+    { day: 'Tue', hours: (teamSize * 0.5 * 1.0).toFixed(1), compliance: 100 },
+    { day: 'Wed', hours: (teamSize * 0.5 * 1.1).toFixed(1), compliance: 92 },
+    { day: 'Thu', hours: (teamSize * 0.5 * 1.0).toFixed(1), compliance: 100 },
+    { day: 'Fri', hours: (teamSize * 0.5 * 0.95).toFixed(1), compliance: 97 },
+  ];
+
   return (
-    <div className="space-y-8 pb-16">
+    <div className="space-y-8 pb-20">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               Team Velocity & Meeting Recovery Insights
             </h1>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-semibold">
-              Real-time Analytics
+              Live ROI Model
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Quantified productivity gains, team mood trends, and cross-timezone sync presence.
+            Quantified productivity gains, team mood trends, and cross-timezone presence for distributed teams.
           </p>
         </div>
       </div>
@@ -83,54 +94,58 @@ export const InsightsPage: React.FC = () => {
       )}
 
       {/* Hero: Meeting Time & Cost Saved Counter (Transparent Math) */}
-      <div className="rounded-2xl border border-blue-200 dark:border-blue-900/80 bg-gradient-to-br from-blue-50/70 via-sky-50/50 to-indigo-50/70 dark:from-slate-900 dark:via-blue-950/30 dark:to-slate-900 p-6 sm:p-8 shadow-sm space-y-6">
+      <div className="rounded-3xl border border-blue-200 dark:border-blue-900/80 bg-gradient-to-br from-blue-50/80 via-sky-50/50 to-indigo-50/80 dark:from-slate-900 dark:via-blue-950/40 dark:to-slate-900 p-6 sm:p-8 shadow-sm space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">
-              <Zap className="w-4 h-4 text-blue-600" />
+              <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>Transparent Productivity Recovery</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               {insights?.meeting_time_saved_hours.toFixed(1) || '66.0'} Hours Saved / Month
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-              Equivalent to <b className="text-emerald-600 dark:text-emerald-400 font-mono">${(insights?.cost_saved_usd || 4950).toLocaleString()}</b> in reclaimed engineering focus time.
+              Equivalent to <b className="text-emerald-600 dark:text-emerald-400 font-mono text-base">${(insights?.cost_saved_usd || 4950).toLocaleString()}</b> in reclaimed engineering focus time each month.
             </p>
           </div>
 
-          {/* Formula Display */}
-          <div className="bg-white/80 dark:bg-slate-800/80 p-4 rounded-xl border border-blue-100 dark:border-blue-900/60 text-xs space-y-1 font-mono">
-            <div className="text-[10px] text-slate-400 uppercase tracking-wider font-sans font-bold">Calculation Formula:</div>
-            <div className="text-blue-900 dark:text-blue-300 font-semibold">
-              {teamSize} members &times; ({meetingDuration} min / 60) &times; {workingDays} days
+          <div className="p-4 rounded-2xl bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-blue-800/80 text-xs space-y-1.5 shadow-xs">
+            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Calculator className="w-4 h-4 text-blue-600" />
+              <span>Annualized Value</span>
             </div>
-            <div className="text-slate-500 text-[11px]">
-              = {insights?.meeting_time_saved_hours.toFixed(1)} hrs &times; ${hourlyRate}/hr = ${(insights?.cost_saved_usd || 0).toLocaleString()}
+            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+              ${((insights?.cost_saved_usd || 4950) * 12).toLocaleString()} / yr
+            </div>
+            <div className="text-[11px] text-slate-500">
+              Based on {teamSize} engineers &bull; {workingDays} days/mo
             </div>
           </div>
         </div>
 
-        {/* Editable Assumptions Sliders */}
-        <div className="pt-4 border-t border-blue-200/60 dark:border-blue-900/60 grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-400">Team Size:</span>
-              <span className="font-bold text-slate-900 dark:text-white">{teamSize} engineers</span>
+        {/* Dynamic Sliders */}
+        <div className="pt-4 border-t border-blue-200/60 dark:border-blue-900/60 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Team Size */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+              <span>Team Size:</span>
+              <span className="font-mono text-blue-600 dark:text-blue-400">{teamSize} engineers</span>
             </div>
             <input
               type="range"
-              min="2"
-              max="30"
+              min="1"
+              max="50"
               value={teamSize}
-              onChange={(e) => setTeamSize(parseInt(e.target.value))}
-              className="w-full accent-blue-600 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+              onChange={(e) => setTeamSize(Number(e.target.value))}
+              className="w-full accent-blue-600"
             />
           </div>
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-400">Daily Standup:</span>
-              <span className="font-bold text-slate-900 dark:text-white">{meetingDuration} mins</span>
+          {/* Meeting Duration */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+              <span>Standup Length:</span>
+              <span className="font-mono text-blue-600 dark:text-blue-400">{meetingDuration} mins / day</span>
             </div>
             <input
               type="range"
@@ -138,124 +153,101 @@ export const InsightsPage: React.FC = () => {
               max="60"
               step="5"
               value={meetingDuration}
-              onChange={(e) => setMeetingDuration(parseInt(e.target.value))}
-              className="w-full accent-blue-600 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+              onChange={(e) => setMeetingDuration(Number(e.target.value))}
+              className="w-full accent-blue-600"
             />
           </div>
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-400">Working Days:</span>
-              <span className="font-bold text-slate-900 dark:text-white">{workingDays} days</span>
+          {/* Hourly Rate */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+              <span>Hourly Rate:</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400">${hourlyRate}/hr</span>
             </div>
             <input
               type="range"
-              min="18"
-              max="24"
-              value={workingDays}
-              onChange={(e) => setWorkingDays(parseInt(e.target.value))}
-              className="w-full accent-blue-600 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-400">Hourly Rate:</span>
-              <span className="font-bold text-slate-900 dark:text-white">${hourlyRate}/hr</span>
-            </div>
-            <input
-              type="range"
-              min="50"
-              max="150"
+              min="30"
+              max="200"
               step="5"
               value={hourlyRate}
-              onChange={(e) => setHourlyRate(parseInt(e.target.value))}
-              className="w-full accent-blue-600 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+              onChange={(e) => setHourlyRate(Number(e.target.value))}
+              className="w-full accent-emerald-600"
+            />
+          </div>
+
+          {/* Working Days */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+              <span>Days / Month:</span>
+              <span className="font-mono text-blue-600 dark:text-blue-400">{workingDays} days</span>
+            </div>
+            <input
+              type="range"
+              min="15"
+              max="25"
+              value={workingDays}
+              onChange={(e) => setWorkingDays(Number(e.target.value))}
+              className="w-full accent-blue-600"
             />
           </div>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Standup Compliance Rate
-          </div>
-          <div className="text-3xl font-extrabold text-blue-600 dark:text-blue-400">
-            {insights?.checkin_rate_pct || 88.5}%
-          </div>
-          <p className="text-[11px] text-slate-500">Consistently above 85% sprint target</p>
-        </div>
-
-        <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Active Blockers
-          </div>
-          <div className="text-3xl font-extrabold text-rose-600 dark:text-rose-400">
-            {insights?.active_blockers_count || 4}
-          </div>
-          <p className="text-[11px] text-slate-500">All backed by verified channel citations</p>
-        </div>
-
-        <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Avg Blocker Resolution Time
-          </div>
-          <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
-            {insights?.avg_resolution_hours || 14.5} hrs
-          </div>
-          <p className="text-[11px] text-slate-500">Down from 36 hours before SyncBrief</p>
-        </div>
-      </div>
-
-      {/* Charts Section */}
+      {/* Visual Analytics Charts */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Mood Trend Chart */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        {/* Weekly Focus Recovery Trend */}
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <Smile className="w-4 h-4 text-amber-500" />
-              <span>Team Mood & Energy Trend (1-5 Scale)</span>
-            </h3>
-            <span className="text-xs font-mono text-emerald-600 font-semibold">Avg: 4.2 / 5.0</span>
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-600" />
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                Daily Engineering Hours Reclaimed
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-500 font-mono">This Week</span>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={insights?.mood_trend || []}>
+              <AreaChart data={trendData}>
                 <defs>
-                  <linearGradient id="moodGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0078D4" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#0078D4" stopOpacity={0.0}/>
+                  <linearGradient id="hoursGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#0078D4" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#0078D4" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
-                <YAxis domain={[1, 5]} stroke="#94a3b8" fontSize={11} />
-                <Tooltip />
-                <Area type="monotone" dataKey="avg_mood" stroke="#0078D4" strokeWidth={2.5} fillOpacity={1} fill="url(#moodGradient)" />
+                <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} />
+                <YAxis stroke="#94a3b8" fontSize={11} unit="h" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff', fontSize: '12px' }}
+                />
+                <Area type="monotone" dataKey="hours" stroke="#0078D4" strokeWidth={3} fillOpacity={1} fill="url(#hoursGrad)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Blocker Severity Distribution */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        {/* Blockers by Severity */}
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-500" />
-              <span>Blockers by Severity Level</span>
-            </h3>
-            <span className="text-xs font-mono text-slate-500">Live Breakdown</span>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                Blocker Severity Distribution
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-500 font-mono">Sprint 24</span>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={severityBarData}>
                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
-                <YAxis allowDecimals={false} stroke="#94a3b8" fontSize={11} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                <YAxis stroke="#94a3b8" fontSize={11} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff', fontSize: '12px' }}
+                />
+                <Bar dataKey="count" radius={[8, 8, 0, 0]}>
                   {severityBarData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}

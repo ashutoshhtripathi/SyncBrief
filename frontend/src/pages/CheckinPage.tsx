@@ -10,7 +10,14 @@ import {
   Clock, 
   ExternalLink,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  HelpCircle,
+  RotateCcw,
+  Check,
+  ShieldCheck,
+  ChevronRight,
+  GitPullRequest,
+  Bookmark
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useAuth } from '../context/AuthContext';
@@ -136,9 +143,20 @@ export const CheckinPage: React.FC = () => {
     setWorkItemId("ADO-4825");
   };
 
+  const handleClear = () => {
+    setYesterday('');
+    setToday('');
+    setBlockers('');
+    setMood(4);
+    setPrLink('');
+    setWorkItemId('');
+    localStorage.removeItem('syncbrief_checkin_draft');
+    setLastAutosave(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!yesterday || !today) {
+    if (!yesterday.trim() || !today.trim()) {
       alert("Please provide achievements for yesterday and goals for today.");
       return;
     }
@@ -146,12 +164,12 @@ export const CheckinPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const result = await submitCheckin({
-        yesterday,
-        today,
-        blockers_text: blockers,
+        yesterday: yesterday.trim(),
+        today: today.trim(),
+        blockers_text: blockers.trim(),
         mood,
-        pr_link: prLink,
-        work_item_id: workItemId,
+        pr_link: prLink.trim(),
+        work_item_id: workItemId.trim(),
         status: 'submitted',
       });
 
@@ -175,15 +193,15 @@ export const CheckinPage: React.FC = () => {
   };
 
   const moodEmojis = [
-    { score: 5, emoji: '⚡', label: 'Peak Momentum' },
-    { score: 4, emoji: '👍', label: 'Good Progress' },
-    { score: 3, emoji: '😐', label: 'Steady / Neutral' },
-    { score: 2, emoji: '🛑', label: 'Blocked / Stalled' },
-    { score: 1, emoji: '🔥', label: 'Critical Impasse' },
+    { score: 5, emoji: '⚡', label: 'Peak Momentum', color: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' },
+    { score: 4, emoji: '👍', label: 'Good Progress', color: 'border-blue-400 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300' },
+    { score: 3, emoji: '😐', label: 'Steady / Neutral', color: 'border-slate-300 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' },
+    { score: 2, emoji: '🛑', label: 'Blocked / Stalled', color: 'border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' },
+    { score: 1, emoji: '🔥', label: 'Critical Impasse', color: 'border-rose-400 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300' },
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-12">
+    <div className="max-w-4xl mx-auto space-y-8 pb-16">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
@@ -196,16 +214,16 @@ export const CheckinPage: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Fast, high-fidelity standup update. Citations are automatically verified against opted-in channels.
+            Async standup update. Blockers are automatically extracted and verified against opted-in team channels.
           </p>
         </div>
 
         {user && (
-          <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+          <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
             <img
               src={user.avatar_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150'}
               alt={user.full_name}
-              className="w-8 h-8 rounded-full object-cover"
+              className="w-9 h-9 rounded-full object-cover ring-2 ring-blue-500/20"
             />
             <div>
               <div className="text-xs font-bold text-slate-900 dark:text-white">{user.full_name}</div>
@@ -218,13 +236,51 @@ export const CheckinPage: React.FC = () => {
         )}
       </div>
 
+      {/* Quick Scenario Fill Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 p-3.5 bg-blue-50/70 dark:bg-blue-950/40 rounded-2xl border border-blue-200/80 dark:border-blue-900/60 text-xs">
+        <div className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
+          <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <span className="font-semibold">Quick Demo Presets:</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={fillHeroScenario}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 shadow-xs transition"
+          >
+            <span>⚡ Priya's Blocker Scenario (Hero PR #184)</span>
+          </button>
+          <button
+            type="button"
+            onClick={fillCleanScenario}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 transition"
+          >
+            <span>✅ Clean Progress (All Clear)</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleClear}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+            title="Reset Form"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
       {/* Confirmation State if just submitted */}
       {submittedCheckin && (
         <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/70 dark:bg-emerald-950/40 p-6 space-y-4 animate-in fade-in">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
-              <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-              <h3 className="font-bold text-base">Check-in Submitted & AI Analyzed!</h3>
+              <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+              <div>
+                <h3 className="font-bold text-base">Check-in Submitted & AI Analyzed!</h3>
+                <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                  Great job! Your standup update has been synthesized into the team digest. Streak is at <b>{submittedCheckin.streak_count} days</b>.
+                </p>
+              </div>
             </div>
             <button
               onClick={() => {
@@ -233,36 +289,35 @@ export const CheckinPage: React.FC = () => {
                 setToday('');
                 setBlockers('');
               }}
-              className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:underline"
+              className="text-xs font-semibold px-3 py-1.5 bg-emerald-600 text-white rounded-lg shadow-xs hover:bg-emerald-700 transition"
             >
-              Submit another check-in
+              Submit Another
             </button>
           </div>
 
-          <p className="text-xs text-emerald-900 dark:text-emerald-200">
-            Great job! Your update has been synthesized into the team standup digest. Streak is now at <b>{submittedCheckin.streak_count} days</b>.
-          </p>
-
           {submittedCheckin.blockers && submittedCheckin.blockers.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800 space-y-3">
+            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800/80 space-y-3">
               <div className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-blue-500" />
                 <span>AI Blocker Extraction & Verified Citations</span>
               </div>
 
-              {submittedCheckin.blockers.map((b: any) => (
-                <div key={b.id} className="space-y-2 text-xs">
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">
-                    &bull; {b.summary}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-slate-500">
-                      Owner: {b.owner_name} &bull; Blocked by: {b.blocked_by}
+              {submittedCheckin.blockers.map((b, idx) => (
+                <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700/80 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 dark:text-white">{b.summary}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 uppercase">
+                      {b.severity}
                     </span>
-                    {b.citations?.map((cit: any, cidx: number) => (
-                      <CitationBadge key={cidx} citation={cit} size="sm" />
-                    ))}
                   </div>
+
+                  {b.citations && b.citations.length > 0 && (
+                    <div className="pt-1 flex flex-wrap items-center gap-2">
+                      {b.citations.map((c, cidx) => (
+                        <CitationBadge key={cidx} citation={c} size="sm" />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -271,279 +326,300 @@ export const CheckinPage: React.FC = () => {
       )}
 
       {/* Main Check-in Form */}
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 sm:p-8 space-y-6">
-        {/* Quick demo presets for judges */}
-        <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-blue-50/60 dark:bg-blue-950/40 rounded-xl border border-blue-100 dark:border-blue-900/60 text-xs">
-          <div className="flex items-center gap-1.5 font-medium text-blue-800 dark:text-blue-300">
-            <Sparkles className="w-4 h-4 text-blue-600" />
-            <span>Hackathon Judge Quick Fills:</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={fillHeroScenario}
-              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900 transition"
-            >
-              Fill Hero Scenario (PR #184 Blocker)
-            </button>
-            <button
-              type="button"
-              onClick={fillCleanScenario}
-              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition"
-            >
-              Fill On-Track Update
-            </button>
-          </div>
-        </div>
-
-        {/* 1. Yesterday */}
-        <div className="space-y-1.5">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Step 1: Yesterday */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-              <span>1. What did you accomplish yesterday?</span>
+            <label className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-bold">1</span>
+              <span>What did you accomplish yesterday?</span>
               <span className="text-rose-500">*</span>
             </label>
+
             <button
               type="button"
               onClick={() => toggleSpeech('yesterday')}
-              className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${
                 isListening && activeSpeechField === 'yesterday'
-                  ? 'bg-rose-100 text-rose-700 animate-pulse'
-                  : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-rose-100 text-rose-700 animate-pulse border border-rose-300'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800'
               }`}
-              title="Speak using browser Web Speech API"
+              title="Speak your update (Web Speech API)"
             >
               {isListening && activeSpeechField === 'yesterday' ? (
                 <>
-                  <Mic className="w-3.5 h-3.5 text-rose-600" />
-                  <span className="text-[11px] font-bold">Listening...</span>
+                  <MicOff className="w-3.5 h-3.5" />
+                  <span>Recording...</span>
+                  <span className="flex items-center gap-0.5 ml-1">
+                    <span className="wave-bar" />
+                    <span className="wave-bar" />
+                    <span className="wave-bar" />
+                  </span>
                 </>
               ) : (
                 <>
-                  <Mic className="w-3.5 h-3.5" />
-                  <span className="text-[11px]">Voice input</span>
+                  <Mic className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Voice input</span>
                 </>
               )}
             </button>
           </div>
+
           <textarea
             value={yesterday}
             onChange={(e) => setYesterday(e.target.value)}
-            placeholder="e.g., Completed OAuth frontend flow & token refresh handler. Validated JWT storage in session."
-            rows={2}
-            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+            rows={3}
+            placeholder="e.g. Completed OAuth frontend flow, fixed auth token expiration bug in session..."
             required
+            className="w-full p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 text-slate-900 dark:text-slate-100 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-hidden transition"
           />
         </div>
 
-        {/* 2. Today */}
-        <div className="space-y-1.5">
+        {/* Step 2: Today */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-              <span>2. What is your primary focus today?</span>
+            <label className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-bold">2</span>
+              <span>What is your primary focus today?</span>
               <span className="text-rose-500">*</span>
             </label>
+
             <button
               type="button"
               onClick={() => toggleSpeech('today')}
-              className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${
                 isListening && activeSpeechField === 'today'
-                  ? 'bg-rose-100 text-rose-700 animate-pulse'
-                  : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-rose-100 text-rose-700 animate-pulse border border-rose-300'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800'
               }`}
-              title="Speak using browser Web Speech API"
             >
               {isListening && activeSpeechField === 'today' ? (
                 <>
-                  <Mic className="w-3.5 h-3.5 text-rose-600" />
-                  <span className="text-[11px] font-bold">Listening...</span>
+                  <MicOff className="w-3.5 h-3.5" />
+                  <span>Recording...</span>
+                  <span className="flex items-center gap-0.5 ml-1">
+                    <span className="wave-bar" />
+                    <span className="wave-bar" />
+                    <span className="wave-bar" />
+                  </span>
                 </>
               ) : (
                 <>
-                  <Mic className="w-3.5 h-3.5" />
-                  <span className="text-[11px]">Voice input</span>
+                  <Mic className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Voice input</span>
                 </>
               )}
             </button>
           </div>
+
           <textarea
             value={today}
             onChange={(e) => setToday(e.target.value)}
-            placeholder="e.g., Testing tenant login endpoints and writing Cypress integration test cases."
-            rows={2}
-            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+            rows={3}
+            placeholder="e.g. Testing tenant login endpoints and writing Cypress integration test cases..."
             required
+            className="w-full p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 text-slate-900 dark:text-slate-100 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-hidden transition"
           />
         </div>
 
-        {/* 3. Blockers */}
-        <div className="space-y-1.5">
+        {/* Step 3: Blockers & Dependencies (With AI Citation Hint) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-              <span>3. Any blockers or dependencies?</span>
-              <span className="text-xs font-normal text-slate-500">(Type 'None' if on track)</span>
-            </label>
+            <div>
+              <label className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-bold">3</span>
+                <span>Any blockers or cross-team dependencies?</span>
+              </label>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Mention PRs, teams, or channels. SyncBrief AI will automatically search opted-in channels for verified proof.
+              </p>
+            </div>
+
             <button
               type="button"
               onClick={() => toggleSpeech('blockers')}
-              className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${
                 isListening && activeSpeechField === 'blockers'
-                  ? 'bg-rose-100 text-rose-700 animate-pulse'
-                  : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-rose-100 text-rose-700 animate-pulse border border-rose-300'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800'
               }`}
-              title="Speak using browser Web Speech API"
             >
               {isListening && activeSpeechField === 'blockers' ? (
                 <>
-                  <Mic className="w-3.5 h-3.5 text-rose-600" />
-                  <span className="text-[11px] font-bold">Listening...</span>
+                  <MicOff className="w-3.5 h-3.5" />
+                  <span>Recording...</span>
+                  <span className="flex items-center gap-0.5 ml-1">
+                    <span className="wave-bar" />
+                    <span className="wave-bar" />
+                    <span className="wave-bar" />
+                  </span>
                 </>
               ) : (
                 <>
-                  <Mic className="w-3.5 h-3.5" />
-                  <span className="text-[11px]">Voice input</span>
+                  <Mic className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Voice input</span>
                 </>
               )}
             </button>
           </div>
+
           <textarea
             value={blockers}
             onChange={(e) => setBlockers(e.target.value)}
-            placeholder="e.g., PR #184 Auth API is blocked waiting for database migration script from the backend team."
             rows={2}
-            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+            placeholder="e.g. PR #184 Auth API is blocked waiting for database migration script from backend team (or leave empty if unblocked)"
+            className="w-full p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 text-slate-900 dark:text-slate-100 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-hidden transition"
           />
+
+          {blockers.trim() && (
+            <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-900/60 text-xs text-blue-700 dark:text-blue-300">
+              <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>AI Citation Validator is ready to match verbatim evidence upon submission.</span>
+            </div>
+          )}
         </div>
 
-        {/* 4. Mood & Energy Level */}
-        <div className="space-y-2">
-          <label className="text-sm font-bold text-slate-900 dark:text-white block">
-            4. Energy & Mood Today
+        {/* Step 4: Momentum / Mood Indicator */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+          <label className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-bold">4</span>
+            <span>How is your momentum / confidence today?</span>
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
             {moodEmojis.map((item) => (
               <button
                 key={item.score}
                 type="button"
                 onClick={() => setMood(item.score)}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${
+                className={`flex flex-col items-center p-3 rounded-xl border text-center transition-all ${
                   mood === item.score
-                    ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/80 ring-2 ring-blue-500/20 shadow-xs'
-                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                    ? `${item.color} shadow-sm ring-2 ring-blue-500/20 scale-102`
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
                 }`}
               >
                 <span className="text-2xl mb-1">{item.emoji}</span>
-                <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">{item.label}</span>
-                <span className="text-[10px] text-slate-400 font-mono">{item.score}/5</span>
+                <span className="text-xs font-bold">{item.label}</span>
+                <span className="text-[10px] text-slate-400 mt-0.5">Score: {item.score}/5</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* 5. Optional PR or Work Item Key */}
-        <div className="grid sm:grid-cols-2 gap-4 pt-2">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Optional Pull Request Link
-            </label>
-            <input
-              type="text"
-              value={prLink}
-              onChange={(e) => setPrLink(e.target.value)}
-              placeholder="https://github.com/microsoft/SyncBrief/pull/184"
-              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 focus:outline-none focus:border-blue-500"
-            />
+        {/* Step 5: Optional Links (PR & Azure DevOps) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Bookmark className="w-3.5 h-3.5" />
+            <span>Optional Work Item & PR Attachment (Azure DevOps / GitHub)</span>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Optional Azure DevOps Work Item
-            </label>
-            <input
-              type="text"
-              value={workItemId}
-              onChange={(e) => setWorkItemId(e.target.value)}
-              placeholder="ADO-4820"
-              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 focus:outline-none focus:border-blue-500"
-            />
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                Pull Request URL:
+              </label>
+              <div className="relative">
+                <GitPullRequest className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="url"
+                  value={prLink}
+                  onChange={(e) => setPrLink(e.target.value)}
+                  placeholder="https://github.com/microsoft/SyncBrief/pull/184"
+                  className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-hidden"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                Azure DevOps Work Item ID:
+              </label>
+              <input
+                type="text"
+                value={workItemId}
+                onChange={(e) => setWorkItemId(e.target.value)}
+                placeholder="e.g. ADO-4820"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-hidden font-mono"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Submit Action Bar */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            {lastAutosave ? (
-              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                {lastAutosave}
-              </span>
-            ) : (
-              <span className="flex items-center gap-1">
-                <Save className="w-3.5 h-3.5" />
-                Autosave active
-              </span>
+        {/* Autosave and Submit Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            {lastAutosave && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>{lastAutosave}</span>
+              </>
             )}
           </div>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-sm rounded-xl shadow-md transition"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Extracting Blockers & Citations...</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                <span>Submit 60-Second Check-in</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-600/25 hover:shadow-xl transition-all duration-150 transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Synthesizing Update...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>Submit 60s Check-in</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </form>
 
-      {/* Standup History */}
+      {/* Recent Check-ins History */}
       {pastCheckins.length > 0 && (
-        <div className="space-y-4 pt-4">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-            <Clock className="w-4 h-4 text-blue-500" />
-            <span>Recent Team Check-in Timeline</span>
-          </h3>
+        <div className="pt-8 border-t border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-base text-slate-900 dark:text-white">
+              Recent Team Standup Updates
+            </h3>
+            <span className="text-xs text-slate-500">{pastCheckins.length} submissions</span>
+          </div>
 
           <div className="space-y-3">
             {pastCheckins.slice(0, 5).map((chk) => (
-              <div key={chk.id} className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>{chk.user_name}</span>
-                    <span className="text-[11px] font-normal text-slate-400 font-mono">
-                      {new Date(chk.created_at).toLocaleDateString()}
+              <div
+                key={chk.id}
+                className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 dark:text-white">{chk.user_name}</span>
+                    <span className="text-slate-400 font-mono text-[11px]">
+                      {chk.created_at ? new Date(chk.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Today'}
                     </span>
                   </div>
-                  <span className="text-xs">
-                    Mood: {'⭐'.repeat(chk.mood)}
-                  </span>
+                  <span className="text-xs">Mood: {'⭐'.repeat(chk.mood)}</span>
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-3 text-xs text-slate-600 dark:text-slate-300">
+                <div className="text-slate-600 dark:text-slate-300 space-y-1">
                   <div>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">Yesterday: </span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">Done: </span>
                     {chk.yesterday}
                   </div>
                   <div>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">Today: </span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">Focus: </span>
                     {chk.today}
                   </div>
+                  {chk.blockers_text && (
+                    <div className="text-rose-600 dark:text-rose-400">
+                      <span className="font-semibold">Blocker: </span>
+                      {chk.blockers_text}
+                    </div>
+                  )}
                 </div>
-
-                {chk.blockers_text && chk.blockers_text.toLowerCase() !== 'none' && (
-                  <div className="pt-1 text-xs text-rose-600 dark:text-rose-400 font-medium">
-                    Blocker: {chk.blockers_text}
-                  </div>
-                )}
               </div>
             ))}
           </div>

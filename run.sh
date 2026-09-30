@@ -6,12 +6,16 @@ echo "⚡ Starting SyncBrief AI (Microsoft Innovate 2026 Hackathon)"
 echo "   Tagline: Async updates. Verifiable evidence. Zero status meetings."
 echo "=========================================================="
 
-# Resolve python and node
+# Resolve binaries dynamically with fallbacks
+PYTHON_SYS="$(which python3 2>/dev/null || echo '/opt/anaconda3/bin/python3')"
+NPM_EXEC="$(which npm 2>/dev/null || echo '/opt/anaconda3/bin/npm')"
+UV_EXEC="$(which uv 2>/dev/null || echo "$HOME/.local/bin/uv")"
+
 PYTHON_EXEC="backend/.venv/bin/python"
 if [ ! -f "$PYTHON_EXEC" ]; then
     echo "Creating Python virtual environment..."
-    ~/.local/bin/uv venv backend/.venv --python /opt/anaconda3/bin/python3
-    ~/.local/bin/uv pip install -r backend/requirements.txt --python backend/.venv/bin/python
+    $UV_EXEC venv backend/.venv --python "$PYTHON_SYS"
+    $UV_EXEC pip install -r backend/requirements.txt --python backend/.venv/bin/python
 fi
 
 echo "1. Seeding realistic 2-week team evidence database..."
@@ -23,7 +27,7 @@ BACKEND_PID=$!
 
 echo "3. Launching Vite React Frontend on http://localhost:5173..."
 cd frontend
-/opt/anaconda3/bin/npm run dev -- --host 127.0.0.1 &
+$NPM_EXEC run dev -- --host 127.0.0.1 &
 FRONTEND_PID=$!
 cd ..
 

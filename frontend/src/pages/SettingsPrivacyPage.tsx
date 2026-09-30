@@ -9,7 +9,10 @@ import {
   FileText, 
   Cpu, 
   Clock, 
-  RefreshCw 
+  RefreshCw,
+  Search,
+  Check,
+  AlertTriangle
 } from 'lucide-react';
 import { fetchChannels, toggleChannelOptIn, fetchAuditTrail, deleteMyData } from '../api';
 import { Channel, AuditLogItem } from '../types';
@@ -21,6 +24,7 @@ export const SettingsPrivacyPage: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
+  const [auditSearch, setAuditSearch] = useState('');
 
   useEffect(() => {
     loadData();
@@ -65,25 +69,33 @@ export const SettingsPrivacyPage: React.FC = () => {
     }
   };
 
+  const filteredLogs = auditLogs.filter((l) =>
+    auditSearch
+      ? l.action.toLowerCase().includes(auditSearch.toLowerCase()) ||
+        l.model_used.toLowerCase().includes(auditSearch.toLowerCase()) ||
+        l.input_summary.toLowerCase().includes(auditSearch.toLowerCase())
+      : true
+  );
+
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-16">
+    <div className="max-w-5xl mx-auto space-y-8 pb-20">
       {/* Header */}
       <div className="border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Privacy Controls & Governance
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Privacy Controls & AI Governance
           </h1>
           <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
             Privacy-First Architecture
           </span>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Opt-in channels, GDPR data management, and the explainable AI audit trail.
+          Opt-in channel management, explainable AI audit trail, and GDPR data sovereignty.
         </p>
       </div>
 
-      {/* Privacy Boundary Card */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs space-y-6">
+      {/* Strict Privacy Boundary Guarantees */}
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-xs space-y-6">
         <div>
           <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
             <Lock className="w-5 h-5 text-blue-600" />
@@ -96,184 +108,163 @@ export const SettingsPrivacyPage: React.FC = () => {
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* What SyncBrief Can See */}
-          <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+          <div className="p-5 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
             <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>What SyncBrief AI CAN Read</span>
+              <span>Opted-In Public Channels Only</span>
             </div>
-            <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-200">
-              <li className="flex items-start gap-2">
-                <span className="text-emerald-600 font-bold">&bull;</span>
-                <span>Messages in channels explicitly enabled below (#backend, #frontend, #devops).</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-emerald-600 font-bold">&bull;</span>
-                <span>Async standup updates you submit via the 60s form or Teams card.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-emerald-600 font-bold">&bull;</span>
-                <span>Work item references (e.g. ADO-4820) and pull request URLs you attach.</span>
-              </li>
-            </ul>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              Only designated public channels (e.g. #backend, #frontend) are indexed for blocker validation. Citations link directly to verbatim text so developers know exactly what source was cited.
+            </p>
           </div>
 
-          {/* What SyncBrief CANNOT See */}
-          <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-800/60 bg-rose-50/40 dark:bg-rose-950/20 space-y-3">
+          {/* What SyncBrief NEVER Sees */}
+          <div className="p-5 rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 space-y-3">
             <div className="flex items-center gap-2 text-xs font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wider">
               <XCircle className="w-4 h-4 text-rose-600" />
-              <span>What SyncBrief AI NEVER Reads</span>
+              <span>Strict Zero Direct Message (DM) Scraping</span>
             </div>
-            <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-200">
-              <li className="flex items-start gap-2">
-                <span className="text-rose-600 font-bold">&bull;</span>
-                <span>Private 1-on-1 Teams direct messages (DMs) or group chats.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-rose-600 font-bold">&bull;</span>
-                <span>Any unopted or private team channels.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-rose-600 font-bold">&bull;</span>
-                <span>Personal files, emails, or call audio streams.</span>
-              </li>
-            </ul>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              SyncBrief AI has zero access to 1:1 direct messages, group chats, or un-opted channels. No personal communications are ever scanned, indexed, or stored.
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Channel Opt-In Management */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs space-y-4">
-        <div>
-          <h3 className="font-bold text-base text-slate-900 dark:text-white">
-            Channel Opt-in Toggles
-          </h3>
-          <p className="text-xs text-slate-500">
-            Control which channels are analyzed for verifiable blocker evidence.
-          </p>
+      {/* Channel Opt-in Toggles */}
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-blue-600" />
+            <h3 className="font-bold text-base text-slate-900 dark:text-white">
+              Opted-In Team Channels
+            </h3>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {channels.filter(c => c.is_syncbrief_enabled).length} of {channels.length} Enabled
+          </span>
         </div>
 
-        <div className="space-y-2">
-          {channels.map((chan) => (
-            <div
-              key={chan.id}
-              className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40"
-            >
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {channels.map((ch) => (
+            <div key={ch.id} className="py-3.5 flex items-center justify-between gap-4">
               <div>
-                <div className="font-bold text-xs text-slate-900 dark:text-white">
-                  {chan.name}
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">{ch.name}</span>
+                  {ch.is_syncbrief_enabled ? (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-semibold">
+                      Active Source
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-[10px] font-semibold">
+                      Excluded
+                    </span>
+                  )}
                 </div>
-                <div className="text-[11px] text-slate-500">
-                  {chan.description} &bull; {chan.member_count} members
-                </div>
+                <p className="text-xs text-slate-500 mt-0.5">{ch.description}</p>
               </div>
 
               <button
-                onClick={() => handleToggleChannel(chan)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                  chan.is_syncbrief_enabled
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                    : 'bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
+                onClick={() => handleToggleChannel(ch)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                  ch.is_syncbrief_enabled
+                    ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-900'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900'
                 }`}
               >
-                {chan.is_syncbrief_enabled ? 'Opted In (Active)' : 'Opted Out'}
+                {ch.is_syncbrief_enabled ? 'Disable Channel' : 'Enable Channel'}
               </button>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Data Retention & GDPR Delete Button */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs space-y-4">
-        <div>
-          <h3 className="font-bold text-base text-slate-900 dark:text-white">
-            Data Retention & Right to be Forgotten (GDPR)
-          </h3>
-          <p className="text-xs text-slate-500">
-            Automated 90-day retention with instant self-service data purging.
-          </p>
-        </div>
-
-        {deleteStatus && (
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-300 text-xs text-emerald-800 dark:text-emerald-300 rounded-lg">
-            {deleteStatus}
-          </div>
-        )}
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/60">
-          <div>
-            <div className="font-bold text-xs text-rose-900 dark:text-rose-300">
-              Purge My Standup History
-            </div>
-            <div className="text-[11px] text-rose-700 dark:text-rose-400">
-              Permanently delete all check-in submissions and associated blocker citations for {user?.full_name}.
+      {/* AI Governance Audit Trail */}
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-blue-600" />
+            <div>
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                Explainable AI Governance Audit Log
+              </h3>
+              <p className="text-xs text-slate-500">
+                Full transparency into every AI model call, validation check, and token latency.
+              </p>
             </div>
           </div>
 
-          <button
-            onClick={handleDeleteData}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-xs transition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete My Data</span>
-          </button>
-        </div>
-      </div>
-
-      {/* AI Audit Trail */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-purple-600" />
-              <span>AI Governance & Explainability Audit Trail</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Every AI output records model name, prompt version, and input IDs.
-            </p>
+          <div className="relative w-48 sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <input
+              type="text"
+              value={auditSearch}
+              onChange={(e) => setAuditSearch(e.target.value)}
+              placeholder="Search audit trail..."
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-hidden"
+            />
           </div>
-          <button
-            onClick={loadData}
-            className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="py-2.5 px-3">Timestamp</th>
-                <th className="py-2.5 px-3">Action</th>
-                <th className="py-2.5 px-3">AI Model</th>
-                <th className="py-2.5 px-3">Prompt Version</th>
-                <th className="py-2.5 px-3">Summary</th>
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
+                <th className="py-2.5 pr-4">Timestamp</th>
+                <th className="py-2.5 pr-4">Action</th>
+                <th className="py-2.5 pr-4">Model</th>
+                <th className="py-2.5 pr-4">Input Context</th>
+                <th className="py-2.5 text-right">Synthesis Output</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-              {auditLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 font-mono text-[11px]">
-                  <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap">
-                    {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-600 dark:text-slate-300">
+              {filteredLogs.map((log) => (
+                <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                  <td className="py-2.5 pr-4 font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                    {log.created_at ? new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Just now'}
                   </td>
-                  <td className="py-2.5 px-3 font-semibold text-blue-600 dark:text-blue-400">
+                  <td className="py-2.5 pr-4 font-medium text-slate-900 dark:text-white">
                     {log.action}
                   </td>
-                  <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200">
+                  <td className="py-2.5 pr-4 font-mono text-blue-600 dark:text-blue-400 text-[11px] whitespace-nowrap">
                     {log.model_used}
                   </td>
-                  <td className="py-2.5 px-3">
-                    <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                      {log.prompt_version}
-                    </span>
+                  <td className="py-2.5 pr-4 text-slate-500 truncate max-w-xs">
+                    {log.input_summary}
                   </td>
-                  <td className="py-2.5 px-3 font-sans truncate max-w-xs" title={log.output_summary}>
+                  <td className="py-2.5 text-right font-medium text-slate-700 dark:text-slate-200 truncate max-w-xs">
                     {log.output_summary}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* GDPR Data Purge */}
+      <div className="rounded-3xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-slate-900 p-6 sm:p-7 shadow-xs space-y-4">
+        <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+          <Trash2 className="w-5 h-5" />
+          <h3 className="font-bold text-base text-slate-900 dark:text-white">
+            GDPR Article 17 Data Sovereignty
+          </h3>
+        </div>
+
+        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          Request an immediate purge of your standup check-in history and AI synthesis drafts from the local tenant database.
+        </p>
+
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleDeleteData}
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
+          >
+            Purge My Standup Data
+          </button>
+          {deleteStatus && (
+            <span className="text-xs text-emerald-600 font-semibold">{deleteStatus}</span>
+          )}
         </div>
       </div>
     </div>
