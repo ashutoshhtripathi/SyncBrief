@@ -22,7 +22,7 @@ echo "1. Seeding realistic 2-week team evidence database..."
 PYTHONPATH=. $PYTHON_EXEC backend/app/seed.py
 
 echo "2. Launching FastAPI Backend on http://127.0.0.1:8000..."
-PYTHONPATH=. $PYTHON_EXEC -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 &
+PYTHONPATH=. $PYTHON_EXEC -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload &
 BACKEND_PID=$!
 
 echo "3. Launching Vite React Frontend on http://localhost:5173..."

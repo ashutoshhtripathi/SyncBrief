@@ -4,9 +4,11 @@
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/Frontend-React_18_%2B_Vite-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
-[![Tailwind CSS](https://img.shields.io/badge/Design-Microsoft_Fluent_Theme-0078D4.svg)](https://tailwindcss.com)
-[![Azure OpenAI](https://img.shields.io/badge/AI-Azure_OpenAI_%2F_Offline_Mock-0078D4.svg?logo=microsoftazure&logoColor=white)](https://azure.microsoft.com)
-[![Tests](https://img.shields.io/badge/Tests-15_Passed-success.svg)](https://pytest.org)
+[![Design](https://img.shields.io/badge/Design-Enterprise_Minimalist_SaaS-0078D4.svg)](https://microsoft.com)
+[![Pytest](https://img.shields.io/badge/Pytest-27_Passed-success.svg)](https://pytest.org)
+[![Vitest](https://img.shields.io/badge/Vitest-5_Passed-success.svg)](https://vitest.dev)
+[![Security](https://img.shields.io/badge/Security-Argon2_%2B_RBAC_%2B_Audit_Logs-blue.svg)](https://github.com)
+
 
 ---
 
@@ -29,21 +31,27 @@ Distributed engineering teams spend **30 to 45 minutes every morning** stuck in 
 graph TD
     subgraph Client ["Client Layer (React 18 + Vite + TS + Tailwind)"]
         UI[App Shell & Microsoft Fluent Theme]
-        CheckinUI["60s Check-in & Voice-to-Text"]
+        CheckinUI["Guided Task Check-in & Slider"]
+        SprintUI["Sprint Kanban Board & Carryover"]
+        PointsUI["My Points & Appraisal Matrix"]
+        JiraUI["SyncBrief vs Jira & CSV Importer"]
+        HierarchyUI["Org Hierarchy & Backend RBAC"]
         DigestUI["Daily Digest & PDF/MD Export"]
-        KanbanUI["Kanban Board & ADO Sync"]
+        KanbanUI["Blocker Board & ADO Sync"]
         SimUI["Teams Channel Simulator"]
         InsightsUI["Productivity Recovery Calculator"]
     end
 
     subgraph Backend ["Backend API (Python FastAPI + Pydantic v2 + SQLite)"]
-        AuthAPI["/api/auth (JWT, 1-Click Demo Login)"]
-        CheckinAPI["/api/checkins (CRUD, Streaks, Autosave)"]
+        AuthAPI["/api/auth (JWT, Hierarchy Tree, Admin CRUD)"]
+        SprintAPI["/api/sprints (Lifecycle, Carry-over, Close)"]
+        TaskAPI["/api/tasks (CRUD, Kanban Status Patch, Filters)"]
+        PointsAPI["/api/points (My Points, Appraisal, CSV Export)"]
+        JiraAPI["/api/jira (CSV Parser & Sprint Importer)"]
+        CheckinAPI["/api/checkins (Task-guided Standup, Autosave)"]
         DigestAPI["/api/digest (AI Synthesis & Adaptive Cards)"]
         BlockerAPI["/api/blockers (Kanban & ADO Sync)"]
         ChannelsAPI["/api/channels (Simulator & Opt-in Toggles)"]
-        TeamsAPI["/api/teams (Bot Framework Webhook)"]
-        InsightsAPI["/api/insights (Metrics & Timezone Strip)"]
     end
 
     subgraph AI_Engine ["AI & Evidence Engine"]
@@ -66,6 +74,119 @@ graph TD
     AI_Engine --> Validator
     AI_Engine --> AuditTrail
     Backend --> Microsoft_Ecosystem
+```
+
+---
+
+## 🗄️ Database Schema (Entity-Relationship Diagram)
+
+```mermaid
+erDiagram
+    USERS ||--o{ USERS : "reports_to (Hierarchy)"
+    USERS ||--o{ TASKS : "assigned_to"
+    USERS ||--o{ CHECKINS : "submits"
+    USERS ||--o{ MESSAGES : "authors"
+
+    SPRINTS ||--o{ TASKS : "contains"
+    
+    CHECKINS ||--o| TASKS : "references_task"
+    CHECKINS ||--o{ BLOCKERS : "triggers"
+    
+    BLOCKERS ||--o{ CITATIONS : "proves"
+    CHANNELS ||--o{ MESSAGES : "contains"
+    MESSAGES ||--o{ CITATIONS : "cited_by"
+
+    USERS {
+        int id PK
+        string email UK
+        string full_name
+        string role
+        string title
+        int role_level "1=Director, 2=Manager, 3=Employee"
+        int reports_to_id FK
+        string org_type "engineering"
+        int streak_count
+    }
+
+    SPRINTS {
+        int id PK
+        string name
+        datetime start_date
+        datetime end_date
+        string status "planned / active / closed"
+        string goal
+    }
+
+    TASKS {
+        int id PK
+        string title
+        string description
+        int assignee_id FK
+        string priority "High / Medium / Low"
+        int difficulty "1, 2, 3, 5, 8 (Fibonacci)"
+        string status "To do / In progress / Blocked / Done"
+        int progress_pct
+        int carried_over_count
+        int sprint_id FK
+        datetime completed_at
+    }
+
+    CHECKINS {
+        int id PK
+        int user_id FK
+        int task_id FK
+        string task_title
+        int progress_pct
+        string progress_note
+        string next_steps
+        string sync_needed_with_json
+        string other_task_ids_json
+        string yesterday
+        string today
+        string blockers_text
+        int mood "1 to 5"
+        int streak_count
+    }
+
+    BLOCKERS {
+        int id PK
+        int checkin_id FK
+        string summary
+        string severity "low / medium / high"
+        string status "open / in_progress / resolved"
+        string owner_name
+        string blocked_by
+        string related_work_item
+        string devops_work_item_id
+    }
+
+    CITATIONS {
+        int id PK
+        int blocker_id FK
+        string message_id FK
+        string channel
+        string author
+        string quote
+        string status "VERIFIED / UNVERIFIED"
+        string rejection_reason
+    }
+
+    CHANNELS {
+        int id PK
+        string name UK
+        string description
+        boolean is_syncbrief_enabled
+        int member_count
+    }
+
+    MESSAGES {
+        string id PK
+        int channel_id FK
+        string author_name
+        string content
+        string thread_id
+        datetime timestamp
+    }
 ```
 
 ---

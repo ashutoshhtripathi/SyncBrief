@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { demoLogin, getCurrentUser } from '../api';
+import { demoLogin, getCurrentUser, loginWithCredentials } from '../api';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  loginAs: (role: 'manager' | 'member', userId?: number) => Promise<void>;
+  loginAs: (role: 'manager' | 'member' | 'admin', userId?: number) => Promise<void>;
+  loginWithEmail: (email: string, password?: string) => Promise<void>;
   logout: () => void;
   switchRole: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -15,6 +17,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshUser = async () => {
+    try {
+      const u = await getCurrentUser();
+      setUser(u);
+      localStorage.setItem('syncbrief_user', JSON.stringify(u));
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     async function initAuth() {
@@ -24,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (storedUser && token) {
           setUser(JSON.parse(storedUser));
         } else {
-          // Auto-login as Sarah Jenkins (Manager) for instant live demo experience
+          // Auto-login as Sarah Jenkins (Manager / Director) for instant live demo experience
           const res = await demoLogin('manager');
           setUser(res.user);
         }
@@ -37,10 +49,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const loginAs = async (role: 'manager' | 'member', userId?: number) => {
+  const loginAs = async (role: 'manager' | 'member' | 'admin', userId?: number) => {
     setIsLoading(true);
     try {
       const res = await demoLogin(role, userId);
+      setUser(res.user);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithEmail = async (email: string, password = 'demo1234') => {
+    setIsLoading(true);
+    try {
+      const res = await loginWithCredentials(email, password);
       setUser(res.user);
     } finally {
       setIsLoading(false);
@@ -54,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchRole = async () => {
-    if (user?.role === 'manager') {
+    if (user?.role === 'manager' || user?.role === 'admin') {
       await loginAs('member');
     } else {
       await loginAs('manager');
@@ -62,7 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, loginAs, logout, switchRole }}>
+    <AuthContext.Provider value={{ user, isLoading, loginAs, loginWithEmail, logout, switchRole, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

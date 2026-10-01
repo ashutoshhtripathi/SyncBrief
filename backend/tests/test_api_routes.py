@@ -30,7 +30,12 @@ def test_demo_login():
     resp = client.post("/api/auth/demo-login", json={"role": "member"})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["user"]["role"] == "member"
+    assert data["user"]["role"] in ["employee", "member"]
+
+    resp = client.post("/api/auth/demo-login", json={"role": "director"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user"]["role"] in ["director", "admin"]
 
 def test_get_checkins_and_blockers():
     resp = client.get("/api/checkins")

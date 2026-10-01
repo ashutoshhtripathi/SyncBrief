@@ -13,50 +13,67 @@ import {
   HelpCircle, 
   Cpu, 
   ArrowRightLeft,
-  Bot,
   Menu,
   X,
-  CheckCircle2,
-  ChevronRight,
-  ShieldCheck
+  Award,
+  Users,
+  Network,
+  ChevronDown,
+  Search,
+  Plus
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { fetchSystemStatus } from '../api';
-import { SystemStatus } from '../types';
+import { fetchSystemStatus, fetchAllUsers } from '../api';
+import { SystemStatus, User as UserType } from '../types';
 
 interface NavbarProps {
   onStartTour: () => void;
+  onOpenCommandPalette?: () => void;
+  onOpenQuickAdd?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
-  const { user, switchRole } = useAuth();
+export const Navbar: React.FC<NavbarProps> = ({ 
+  onStartTour,
+  onOpenCommandPalette,
+  onOpenQuickAdd,
+}) => {
+  const { user, loginAs } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<UserType[]>([]);
 
   useEffect(() => {
     fetchSystemStatus().then(setStatus).catch(() => {});
+    fetchAllUsers().then(setAvailableUsers).catch(() => {});
   }, []);
 
   // Close mobile menu on page change
   useEffect(() => {
     setMobileMenuOpen(false);
+    setIsRoleDropdownOpen(false);
   }, [location.pathname]);
 
   const navItems = [
     { label: 'Today', path: '/', icon: CalendarCheck, desc: "Team's daily standup hub" },
-    { label: 'Check-in', path: '/checkin', icon: Sparkles, desc: '60s async update with voice-to-text', badge: '60s' },
-    { label: 'Daily Digest', path: '/digest', icon: FileText, desc: 'AI summary & verifiable citations' },
-    { label: 'Blocker Board', path: '/blockers', icon: Kanban, desc: 'Kanban & Azure DevOps work items' },
+    { label: 'Check-in', path: '/checkin', icon: Sparkles, desc: '60s async update with task link', badge: '60s' },
+    { label: 'Sprints', path: '/sprints', icon: Kanban, desc: 'Sprint Kanban board & story points' },
+    { label: 'Blockers', path: '/blockers', icon: Kanban, desc: 'AI blocker board & Azure DevOps' },
+    { label: 'Digest', path: '/digest', icon: FileText, desc: 'AI summary & verifiable citations' },
+    { label: 'My Points', path: '/points', icon: Award, desc: 'Points earned & delivery velocity' },
+    { label: 'Appraisal', path: '/appraisal', icon: Users, desc: 'Subordinate team performance review' },
+    { label: 'Why SyncBrief', path: '/why-syncbrief', icon: Sparkles, desc: 'SyncBrief vs Jira & CSV import' },
+    { label: 'Org & Team', path: '/hierarchy', icon: Network, desc: 'Reporting structure & RBAC visibility' },
     { label: 'Insights', path: '/insights', icon: BarChart3, desc: 'Velocity metrics & meeting time saved' },
-    { label: 'Teams Simulator', path: '/channels', icon: MessageSquare, desc: 'Opted-in channel evidence source' },
-    { label: 'Privacy & Settings', path: '/settings', icon: Settings, desc: 'Channel opt-in & audit trail' },
+    { label: 'Teams Source', path: '/channels', icon: MessageSquare, desc: 'Opted-in channel evidence source' },
+    { label: 'Settings', path: '/settings', icon: Settings, desc: 'Channel opt-in & audit trail' },
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl transition-colors shadow-xs">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl transition-colors shadow-xs">
       {/* Top Microsoft Innovate Ribbon */}
       <div className="bg-gradient-to-r from-blue-700 via-sky-600 to-indigo-700 text-white text-xs px-4 py-1.5 flex items-center justify-between font-medium">
         <div className="flex items-center gap-2">
@@ -93,12 +110,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
       </div>
 
       {/* Main Navbar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-        {/* Brand */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+        {/* Brand with New Modern SVG Logo */}
         <Link to="/" className="flex items-center gap-2.5 group shrink-0">
           <div className="relative">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-sky-500 text-white flex items-center justify-center shadow-md shadow-blue-500/25 group-hover:scale-105 transition-all duration-200">
-              <Bot className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-sky-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/25 group-hover:scale-105 transition-all duration-200 p-1.5">
+              <img src="/favicon.svg" alt="SyncBrief AI Logo" className="w-full h-full drop-shadow-xs" />
             </div>
             <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" />
           </div>
@@ -110,13 +127,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
               </span>
             </div>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-0.5 hidden sm:block font-medium">
-              Microsoft Teams & ADO Native
+              Teams &bull; DevOps &bull; Async Standup
             </p>
           </div>
         </Link>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden xl:flex items-center gap-1">
+        <nav className="hidden 2xl:flex items-center gap-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -124,51 +141,128 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
                   isActive
                     ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 shadow-xs ring-1 ring-blue-500/20'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/80'
                 }`}
                 title={item.desc}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
                 {item.badge && (
                   <span className="text-[9px] font-bold px-1 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
                     {item.badge}
                   </span>
                 )}
-                {isActive && (
-                  <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full" />
-                )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Right Section: Role Switcher, Profile & Theme */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* 1-Click Role Switcher */}
-          {user && (
+        {/* Medium-screen compact primary links */}
+        <nav className="hidden md:flex 2xl:hidden items-center gap-1">
+          {navItems.slice(0, 6).map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+                title={item.desc}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Right Section: Command Palette, Quick Add, Persona Switcher, Avatar, Theme */}
+        <div className="flex items-center gap-2">
+          {/* Quick Command Palette Button */}
+          {onOpenCommandPalette && (
             <button
-              onClick={switchRole}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all shadow-xs hover:border-blue-400 dark:hover:border-blue-500"
-              title={`Currently logged in as ${user.full_name} (${user.role.toUpperCase()}). Click to switch to ${user.role === 'manager' ? 'Priya (Member)' : 'Sarah (Manager)'}`}
+              onClick={onOpenCommandPalette}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:border-blue-400 transition"
+              title="Open Command Palette (Cmd+K)"
             >
-              <div className="p-1 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
-                <ArrowRightLeft className="w-3 h-3" />
-              </div>
-              <div className="text-left hidden sm:block">
-                <div className="text-[10px] text-slate-400 uppercase tracking-wider leading-none">Persona</div>
-                <div className="text-xs font-bold text-blue-600 dark:text-blue-400 leading-tight">
-                  {user.role === 'manager' ? 'Sarah (Manager)' : 'Priya (Member)'}
-                </div>
-              </div>
-              <span className="sm:hidden text-xs font-bold text-blue-600 dark:text-blue-400">
-                {user.role === 'manager' ? 'Sarah' : 'Priya'}
-              </span>
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <span className="hidden xl:inline text-[11px]">Search...</span>
+              <kbd className="hidden lg:inline-block px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-[10px] font-mono text-slate-500">
+                ⌘K
+              </kbd>
             </button>
           )}
+
+          {/* Quick Add Task Button */}
+          {onOpenQuickAdd && (
+            <button
+              onClick={onOpenQuickAdd}
+              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition"
+              title="Quick Add Task (Press C)"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Task</span>
+              <kbd className="hidden md:inline-block px-1 py-0.2 rounded bg-blue-700 text-[9px] font-mono opacity-80">
+                C
+              </kbd>
+            </button>
+          )}
+
+          {/* Quick Persona Switcher Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-300 hover:border-blue-400 transition"
+              title="Switch demo persona to test hierarchy access"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5 text-blue-500" />
+              <span className="font-bold hidden sm:inline">{user?.full_name?.split(' ')[0] || 'User'}</span>
+              <span className="font-mono text-[10px] px-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-bold">
+                L{user?.role_level || 5}
+              </span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+
+            {isRoleDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-2 z-50 animate-in fade-in space-y-1">
+                <div className="px-2.5 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Test Hierarchy Personas
+                </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {availableUsers.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => {
+                        loginAs(u.role as any, u.id);
+                        setIsRoleDropdownOpen(false);
+                      }}
+                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between transition ${
+                        user?.id === u.id
+                          ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="truncate">
+                        <div>{u.full_name}</div>
+                        <div className="text-[10px] text-slate-400 font-normal">{u.title}</div>
+                      </div>
+                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 shrink-0">
+                        L{u.role_level}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* User Avatar */}
           {user && (
@@ -176,7 +270,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
               <img
                 src={user.avatar_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150'}
                 alt={user.full_name}
-                className="w-9 h-9 rounded-full object-cover ring-2 ring-blue-500/40 shadow-xs"
+                className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500/40 shadow-xs"
               />
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
             </div>
@@ -185,7 +279,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+            className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
@@ -194,7 +288,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
           {/* Mobile Hamburger Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="xl:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200 dark:border-slate-700"
+            className="2xl:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             aria-label="Toggle navigation menu"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -204,8 +298,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
 
       {/* Mobile Navigation Drawer / Dropdown */}
       {mobileMenuOpen && (
-        <div className="xl:hidden border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl px-4 py-4 space-y-2 animate-in slide-in-from-top-2 duration-150 shadow-lg">
-          <div className="grid grid-cols-2 gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="2xl:hidden border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl px-4 py-4 space-y-2 animate-in slide-in-from-top-2 duration-150 shadow-lg">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
@@ -236,16 +330,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartTour }) => {
                 />
                 <div>
                   <div className="font-bold text-slate-800 dark:text-slate-200">{user.full_name}</div>
-                  <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold uppercase">{user.role}</div>
+                  <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
+                    {user.title} (Level {user.role_level})
+                  </div>
                 </div>
               </div>
-
-              <button
-                onClick={switchRole}
-                className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-semibold text-[11px] border border-blue-200 dark:border-blue-800"
-              >
-                Switch Role
-              </button>
             </div>
           )}
         </div>

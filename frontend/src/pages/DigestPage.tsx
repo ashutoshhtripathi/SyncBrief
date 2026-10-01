@@ -17,7 +17,8 @@ import {
   DollarSign,
   Zap,
   Calendar,
-  ExternalLink
+  ExternalLink,
+  Star
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { fetchTodayDigest, regenerateDigest } from '../api';
@@ -407,7 +408,14 @@ export const DigestPage: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <span className="text-xs">Mood: {'⭐'.repeat(p.mood)}</span>
+                <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span>Mood:</span>
+                  <span className="flex items-center gap-0.5">
+                    {Array.from({ length: Math.min(5, Math.max(1, p.mood || 3)) }).map((_, i) => (
+                      <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    ))}
+                  </span>
+                </div>
               </div>
 
               <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5">

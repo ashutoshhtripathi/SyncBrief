@@ -1,39 +1,163 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Any, Dict
 from datetime import datetime
 
-# --- Auth Schemas ---
+# --- Auth & User Schemas ---
 class LoginRequest(BaseModel):
     email: str
     password: str
 
 class DemoLoginRequest(BaseModel):
-    role: str = "manager" # "manager" or "member"
+    role: str = "manager" # "manager", "member", "admin"
     user_id: Optional[int] = None
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
     user: Dict[str, Any]
 
 class UserProfile(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: str
     full_name: str
     role: str
     title: str
-    avatar_url: Optional[str]
-    timezone: str
-    reminder_time: str
-    streak_count: int
+    avatar_url: Optional[str] = None
+    timezone: str = "Asia/Kolkata"
+    reminder_time: str = "09:30"
+    streak_count: int = 0
+    role_level: int = 5
+    reports_to_id: Optional[int] = None
+    org_type: str = "engineering"
+    manager_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+class UserCreate(BaseModel):
+    email: str
+    password: str = "demo1234"
+    full_name: str
+    role: str = "member"
+    title: str = "Software Engineer"
+    avatar_url: Optional[str] = None
+    timezone: str = "Asia/Kolkata"
+    reminder_time: str = "09:30"
+    role_level: int = 5
+    reports_to_id: Optional[int] = None
+    org_type: str = "engineering"
 
-# --- Check-in Schemas ---
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    title: Optional[str] = None
+    role: Optional[str] = None
+    avatar_url: Optional[str] = None
+    timezone: Optional[str] = None
+    reminder_time: Optional[str] = None
+    role_level: Optional[int] = None
+    reports_to_id: Optional[int] = None
+    org_type: Optional[str] = None
+
+# --- Sprint Schemas ---
+class SprintCreate(BaseModel):
+    name: str
+    start_date: datetime
+    end_date: datetime
+    status: str = "planned" # "planned", "active", "closed"
+    goal: Optional[str] = None
+
+class SprintUpdate(BaseModel):
+    name: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: Optional[str] = None
+    goal: Optional[str] = None
+
+class SprintCloseRequest(BaseModel):
+    target_sprint_id: Optional[int] = None # Next sprint to move unfinished tasks to
+    create_next_sprint: bool = False
+    next_sprint_name: Optional[str] = None
+
+class SprintResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    start_date: datetime
+    end_date: datetime
+    status: str
+    goal: Optional[str] = None
+    created_at: datetime
+    task_count: int = 0
+    completed_task_count: int = 0
+
+# --- Task Schemas ---
+class TaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    assignee_id: Optional[int] = None
+    priority: str = "Medium" # "High", "Medium", "Low"
+    difficulty: int = Field(default=3, ge=1, le=8) # 1, 2, 3, 5, 8
+    status: str = "To do" # "To do", "In progress", "Blocked", "Done"
+    progress_pct: int = Field(default=0, ge=0, le=100)
+    sprint_id: Optional[int] = None
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assignee_id: Optional[int] = None
+    priority: Optional[str] = None
+    difficulty: Optional[int] = None
+    status: Optional[str] = None
+    progress_pct: Optional[int] = None
+    sprint_id: Optional[int] = None
+    version: Optional[int] = None
+
+class TaskStatusUpdate(BaseModel):
+    status: str # "To do", "In progress", "Blocked", "Done"
+    progress_pct: Optional[int] = None
+    version: Optional[int] = None
+
+class TaskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: Optional[str] = ""
+    assignee_id: Optional[int] = None
+    assignee_name: Optional[str] = ""
+    assignee_avatar: Optional[str] = None
+    creator_id: Optional[int] = None
+    priority: str = "Medium"
+    difficulty: int = 3
+    status: str = "To do"
+    progress_pct: int = 0
+    sprint_id: Optional[int] = None
+    sprint_name: Optional[str] = None
+    carried_over_count: int = 0
+    earned_points: float = 0.0
+    version: int = 1
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+# --- Task-Based Check-in Schemas ---
 class CheckinCreate(BaseModel):
-    yesterday: str
-    today: str
+    # Task-based fields
+    task_id: Optional[int] = None
+    task_title: Optional[str] = None
+    progress_pct: Optional[int] = 0
+    progress_note: Optional[str] = ""
+    next_steps: Optional[str] = ""
+    sync_needed_with: Optional[List[str]] = []
+    other_task_ids: Optional[List[int]] = []
+
+    # Original / summary fields
+    yesterday: Optional[str] = ""
+    today: Optional[str] = ""
     blockers_text: Optional[str] = ""
     mood: int = Field(default=4, ge=1, le=5)
     pr_link: Optional[str] = None
@@ -41,23 +165,29 @@ class CheckinCreate(BaseModel):
     status: str = "submitted" # "submitted" or "draft"
 
 class CheckinResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     user_name: str
+    task_id: Optional[int] = None
+    task_title: Optional[str] = None
+    progress_pct: Optional[int] = 0
+    progress_note: Optional[str] = ""
+    next_steps: Optional[str] = ""
+    sync_needed_with: Optional[List[str]] = []
+    other_task_ids: Optional[List[int]] = []
     yesterday: str
     today: str
-    blockers_text: Optional[str]
+    blockers_text: Optional[str] = None
     mood: int
-    pr_link: Optional[str]
-    work_item_id: Optional[str]
+    pr_link: Optional[str] = None
+    work_item_id: Optional[str] = None
     status: str
     streak_count: int
     ai_processed: bool
     created_at: datetime
     blockers: List[Any] = []
-
-    class Config:
-        from_attributes = True
 
 # --- Citation & Blocker Schemas ---
 class CitationItem(BaseModel):
@@ -71,7 +201,7 @@ class CitationItem(BaseModel):
 
 class BlockerExtractionResult(BaseModel):
     blocker_summary: str
-    severity: str = "medium" # "low", "medium", "high"
+    severity: str = "medium"
     owner: str
     blocked_by: str
     related_work_item: Optional[str] = None
@@ -79,23 +209,22 @@ class BlockerExtractionResult(BaseModel):
     citations: List[CitationItem] = []
 
 class BlockerResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
-    checkin_id: Optional[int]
+    checkin_id: Optional[int] = None
     summary: str
     severity: str
     status: str
     owner_name: str
     blocked_by: str
-    related_work_item: Optional[str]
+    related_work_item: Optional[str] = None
     confidence: float
-    citations: List[CitationItem]
-    devops_work_item_id: Optional[str]
-    devops_payload: Optional[str]
+    citations: List[CitationItem] = []
+    devops_work_item_id: Optional[str] = None
+    devops_payload: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class BlockerStatusUpdate(BaseModel):
     status: str # "open", "in_progress", "resolved"
@@ -113,27 +242,25 @@ class MessageCreate(BaseModel):
     thread_id: Optional[str] = None
 
 class MessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     channel_id: int
     channel_name: str
     author_name: str
-    author_avatar: Optional[str]
+    author_avatar: Optional[str] = None
     content: str
-    thread_id: Optional[str]
+    thread_id: Optional[str] = None
     timestamp: datetime
 
-    class Config:
-        from_attributes = True
-
 class ChannelResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     is_syncbrief_enabled: bool
     member_count: int
-
-    class Config:
-        from_attributes = True
 
 class ChannelToggleRequest(BaseModel):
     is_syncbrief_enabled: bool
@@ -147,6 +274,8 @@ class PersonProgress(BaseModel):
     has_blockers: bool
 
 class DigestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     date: str
     progress_by_person: List[Dict[str, Any]]
@@ -157,9 +286,6 @@ class DigestResponse(BaseModel):
     markdown_content: str
     teams_card_json: Dict[str, Any]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 # --- Insights Schemas ---
 class SavingsAssumption(BaseModel):
@@ -176,5 +302,70 @@ class InsightsResponse(BaseModel):
     cost_saved_usd: float
     mood_trend: List[Dict[str, Any]]
     blockers_by_severity: Dict[str, int]
-    blockers_resolved_trend: List[Dict[str, Any]]
     assumptions: SavingsAssumption
+
+# --- Points & Appraisal Schemas ---
+class TaskPointDetail(BaseModel):
+    task_id: int
+    title: str
+    difficulty: int
+    carried_over_count: int
+    penalty_pct_applied: float
+    earned_points: float
+    status: str
+    completed_at: Optional[datetime] = None
+
+class PointsSummaryResponse(BaseModel):
+    user_id: int
+    user_name: str
+    title: str
+    quarter: str
+    total_points: float
+    tasks_completed_on_time: int
+    tasks_carried_over: int
+    on_time_rate_pct: float
+    checkin_streak: int
+    checkin_consistency_pct: float
+    blockers_resolved: int
+    carry_over_penalty_pct: float
+    formula_text: str
+    tasks: List[TaskPointDetail] = []
+    points_per_sprint: List[Dict[str, Any]] = []
+
+class AppraisalEmployeeItem(BaseModel):
+    user_id: int
+    full_name: str
+    role: str
+    title: str
+    avatar_url: Optional[str] = None
+    role_level: int
+    manager_name: Optional[str] = None
+    quarter: str
+    total_points: float
+    tasks_completed: int
+    on_time_rate_pct: float
+    carry_over_count: int
+    blockers_raised: int
+    blockers_resolved: int
+    checkin_consistency_pct: float
+    appraisal_score: float # e.g. 4.6 / 5.0
+    rating_category: str # "Exceeds Expectations", "Meets Expectations", etc.
+
+class AppraisalReportResponse(BaseModel):
+    manager_id: int
+    manager_name: str
+    quarter: str
+    carry_over_penalty_pct: float
+    formula_text: str
+    employees: List[AppraisalEmployeeItem] = []
+
+# --- Jira Import Schemas ---
+class JiraImportRequest(BaseModel):
+    csv_content: str
+    target_sprint_id: Optional[int] = None
+
+class JiraImportResponse(BaseModel):
+    imported_count: int
+    sprint_id: Optional[int]
+    tasks: List[TaskResponse] = []
+    errors: List[str] = []

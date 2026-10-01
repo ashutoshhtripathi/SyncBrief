@@ -1,0 +1,109 @@
+/**
+ * SyncBrief Enterprise Design Tokens
+ * 8px Spacing Scale, Microsoft Fluent Blue Accent, WCAG AA Accessible
+ */
+
+:root {
+  /* Neutral Palette (Light) */
+  --color-bg-canvas: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-subtle: #f1f5f9;
+  --color-bg-muted: #e2e8f0;
+  
+  --color-fg-default: #0f172a;
+  --color-fg-muted: #475569;
+  --color-fg-subtle: #64748b;
+  --color-fg-on-primary: #ffffff;
+
+  --color-border-subtle: #e2e8f0;
+  --color-border-default: #cbd5e1;
+  --color-border-hover: #94a3b8;
+
+  /* Brand Primary (Fluent Blue #0078D4) */
+  --color-primary-subtle: #eff6ff;
+  --color-primary-light: #bfdbfe;
+  --color-primary-base: #0078d4;
+  --color-primary-hover: #0066b8;
+  --color-primary-active: #005a9e;
+
+  /* Semantic Status Colors */
+  --color-success-bg: #ecfdf5;
+  --color-success-border: #a7f3d0;
+  --color-success-text: #065f46;
+  --color-success-base: #10b981;
+
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-text: #92400e;
+  --color-warning-base: #f59e0b;
+
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-danger-text: #991b1b;
+  --color-danger-base: #ef4444;
+
+  /* 4px/8px Spacing Grid */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Corner Radius Scale */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark {
+  /* Neutral Palette (Dark) */
+  --color-bg-canvas: #090d16;
+  --color-bg-surface: #0f172a;
+  --color-bg-subtle: #1e293b;
+  --color-bg-muted: #334155;
+
+  --color-fg-default: #f8fafc;
+  --color-fg-muted: #cbd5e1;
+  --color-fg-subtle: #94a3b8;
+  --color-fg-on-primary: #ffffff;
+
+  --color-border-subtle: #1e293b;
+  --color-border-default: #334155;
+  --color-border-hover: #475569;
+
+  /* Brand Primary in Dark */
+  --color-primary-subtle: #172554;
+  --color-primary-light: #1e40af;
+  --color-primary-base: #38bdf8;
+  --color-primary-hover: #0284c7;
+  --color-primary-active: #0369a1;
+
+  /* Semantic Status in Dark */
+  --color-success-bg: #064e3b;
+  --color-success-border: #047857;
+  --color-success-text: #a7f3d0;
+  --color-success-base: #34d399;
+
+  --color-warning-bg: #451a03;
+  --color-warning-border: #78350f;
+  --color-warning-text: #fde68a;
+  --color-warning-base: #fbbf24;
+
+  --color-danger-bg: #450a0a;
+  --color-danger-border: #7f1d1d;
+  --color-danger-text: #fecaca;
+  --color-danger-base: #f87171;
+}

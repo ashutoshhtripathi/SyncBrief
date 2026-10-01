@@ -20,10 +20,16 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { CitationBadge } from '../components/CitationBadge';
+import { TodayDashboard } from '../components/TodayDashboard';
 
-export const LandingPage: React.FC = () => {
+interface LandingPageProps {
+  onOpenQuickAdd?: () => void;
+}
+
+export const LandingPage: React.FC<LandingPageProps> = ({ onOpenQuickAdd = () => {} }) => {
   const navigate = useNavigate();
-  const { loginAs } = useAuth();
+  const { user, loginAs } = useAuth();
+  const [activeMainTab, setActiveMainTab] = useState<'today' | 'showcase'>('today');
   const [activeStepTab, setActiveStepTab] = useState<'checkin' | 'extract' | 'verify' | 'devops'>('verify');
 
   const handleTryDemo = async (role: 'manager' | 'member' = 'manager') => {
@@ -32,9 +38,55 @@ export const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-20 pb-20">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden pt-10 pb-16 md:pt-16 md:pb-20 text-center">
+    <div className="space-y-6 pb-20">
+      {/* View Switcher: Daily Operations vs Product Tour */}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200/70 dark:border-slate-800/70">
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+          <button
+            onClick={() => setActiveMainTab('today')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold transition ${
+              activeMainTab === 'today'
+                ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+            <span>Today's Standup Hub</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+              {user?.role?.toUpperCase()}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveMainTab('showcase')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold transition ${
+              activeMainTab === 'showcase'
+                ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <PlayCircle className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Product Tour &amp; Pipeline</span>
+          </button>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
+          <span>Shortcuts:</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border text-[10px] font-mono">C</kbd>
+          <span>New Task</span>
+          <span>&bull;</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border text-[10px] font-mono">⌘K</kbd>
+          <span>Command Palette</span>
+        </div>
+      </div>
+
+      {/* Render Today Dashboard or Product Tour */}
+      {activeMainTab === 'today' ? (
+        <TodayDashboard onOpenQuickAdd={onOpenQuickAdd} />
+      ) : (
+        <div className="space-y-16 animate-in fade-in">
+          {/* Hero Section */}
+          <section className="relative overflow-hidden pt-6 pb-12 text-center">
         {/* Ambient Gradient Glows */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-gradient-to-tr from-blue-500/15 via-sky-400/20 to-indigo-500/15 blur-3xl -z-10 rounded-full pointer-events-none" />
 
@@ -439,6 +491,8 @@ export const LandingPage: React.FC = () => {
           </div>
         </div>
       </section>
+        </div>
+      )}
     </div>
   );
 };

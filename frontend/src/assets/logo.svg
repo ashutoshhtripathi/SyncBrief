@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="sbGradientPrimary" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0078D4" />
+      <stop offset="50%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+    <filter id="sbShadow" x="-10%" y="-10%" width="120%" height="120%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#004880" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Outer Synchronize Arc 1 (Top-Right) -->
+  <path d="M24 6C33.941 6 42 14.059 42 24C42 27.2 41.16 30.2 39.7 32.8" stroke="url(#sbGradientPrimary)" stroke-width="3.5" stroke-linecap="round" />
+  <polyline points="43,26 43,34 35,34" fill="none" stroke="url(#sbGradientPrimary)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Outer Synchronize Arc 2 (Bottom-Left) -->
+  <path d="M24 42C14.059 42 6 33.941 6 24C6 20.8 6.84 17.8 8.3 15.2" stroke="url(#sbGradientPrimary)" stroke-width="3.5" stroke-linecap="round" />
+  <polyline points="5,22 5,14 13,14" fill="none" stroke="url(#sbGradientPrimary)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Center Document / Brief with Folded Corner -->
+  <g filter="url(#sbShadow)">
+    <path d="M16 14C16 12.895 16.895 12 18 12H27L33 18V34C33 35.105 32.105 36 31 36H18C16.895 36 16 35.105 16 34V14Z" fill="url(#sbGradientPrimary)" />
+    <path d="M27 12V17C27 17.552 27.448 18 28 18H33L27 12Z" fill="#93C5FD" />
+    
+    <line x1="19.5" y1="22" x2="29.5" y2="22" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="19.5" y1="26" x2="27.5" y2="26" stroke="#E0F2FE" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="19.5" y1="30" x2="24" y2="30" stroke="#BAE6FD" stroke-width="1.8" stroke-linecap="round" />
+  </g>
+</svg>

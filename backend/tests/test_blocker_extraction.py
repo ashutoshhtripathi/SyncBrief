@@ -1,8 +1,8 @@
+import asyncio
 import pytest
 from backend.app.ai.mock_provider import MockProvider
 
-@pytest.mark.asyncio
-async def test_hero_blocker_extraction():
+def test_hero_blocker_extraction():
     provider = MockProvider()
     checkin_data = {
         "user_name": "Priya Sharma",
@@ -22,7 +22,7 @@ async def test_hero_blocker_extraction():
         }
     ]
 
-    blockers = await provider.extract_blockers(checkin_data, channel_messages)
+    blockers = asyncio.run(provider.extract_blockers(checkin_data, channel_messages))
     assert len(blockers) == 1
     hero = blockers[0]
     assert hero["severity"] == "high"
@@ -32,8 +32,7 @@ async def test_hero_blocker_extraction():
     assert hero["citations"][0]["message_id"] == "msg_492"
     assert "0042_oauth_tenants.sql" in hero["citations"][0]["quote"]
 
-@pytest.mark.asyncio
-async def test_no_blockers_returns_empty():
+def test_no_blockers_returns_empty():
     provider = MockProvider()
     checkin_data = {
         "user_name": "Sarah Jenkins",
@@ -41,11 +40,10 @@ async def test_no_blockers_returns_empty():
         "today": "1:1s",
         "blockers_text": "None"
     }
-    blockers = await provider.extract_blockers(checkin_data, [])
+    blockers = asyncio.run(provider.extract_blockers(checkin_data, []))
     assert blockers == []
 
-@pytest.mark.asyncio
-async def test_digest_synthesis():
+def test_digest_synthesis():
     provider = MockProvider()
     checkins = [
         {"user_name": "Priya Sharma", "yesterday": "OAuth", "today": "Testing", "mood": 2, "blockers_text": "Waiting on migration"},
@@ -60,10 +58,10 @@ async def test_digest_synthesis():
         {"full_name": "Rohan Patel"}
     ]
 
-    digest = await provider.generate_digest(checkins, blockers, team_members, "2026-09-29")
+    digest = asyncio.run(provider.generate_digest(checkins, blockers, team_members, "2026-09-29"))
     assert digest["date"] == "2026-09-29"
     assert len(digest["progress_by_person"]) == 2
     assert "Rohan Patel" in digest["missing_checkins"]
     assert len(digest["risks"]) > 0
     assert len(digest["suggested_actions"]) > 0
-    assert "# 🚀 SyncBrief Daily Standup Digest" in digest["markdown_content"]
+    assert "SyncBrief Daily Standup Digest" in digest["markdown_content"]

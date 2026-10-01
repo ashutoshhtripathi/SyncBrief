@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: syncbrief-ai
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: DATABASE_URL
+        value: sqlite:////app/data/syncbrief.db
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_KEY
+        sync: false
+      - key: AZURE_OPENAI_DEPLOYMENT
+        value: gpt-4o
+      - key: TEAMS_WEBHOOK_URL
+        sync: false
+      - key: AZURE_DEVOPS_PAT
+        sync: false
+    disk:
+      name: syncbrief-storage
+      mountPath: /app/data
+      sizeGB: 1

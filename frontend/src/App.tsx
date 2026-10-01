@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { Navbar } from './components/Navbar';
+import { ToastProvider } from './context/ToastContext';
+import { AppLayout } from './components/layout/AppLayout';
 import { TourGuide } from './components/TourGuide';
 import { DemoScenarioButton } from './components/DemoScenarioButton';
+import { CommandPalette } from './components/CommandPalette';
+import { QuickAddTaskModal } from './components/QuickAddTaskModal';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 
 // Pages
 import { LandingPage } from './pages/LandingPage';
@@ -15,6 +19,11 @@ import { BlockerBoardPage } from './pages/BlockerBoardPage';
 import { ChannelSimulatorPage } from './pages/ChannelSimulatorPage';
 import { InsightsPage } from './pages/InsightsPage';
 import { SettingsPrivacyPage } from './pages/SettingsPrivacyPage';
+import { SprintBoardPage } from './pages/SprintBoardPage';
+import { MyPointsPage } from './pages/MyPointsPage';
+import { AppraisalPage } from './pages/AppraisalPage';
+import { WhySyncBriefPage } from './pages/WhySyncBriefPage';
+import { OrgHierarchyPage } from './pages/OrgHierarchyPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,52 +34,151 @@ const queryClient = new QueryClient({
   },
 });
 
-export const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const navigate = useNavigate();
   const [isTourOpen, setIsTourOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
+  const lastKeyRef = useRef<string>('');
+  const lastKeyTimeRef = useRef<number>(0);
+
+  // Global keyboard shortcuts (Cmd+K, C, ?, /, and G-chords)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInput =
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl?.tagName || '') ||
+        (activeEl as HTMLElement)?.isContentEditable;
+
+      // Cmd+K or Ctrl+K -> Command Palette (works even in inputs)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      if (isInput) return;
+
+      const now = Date.now();
+      const lastKey = lastKeyRef.current;
+      const lastKeyTime = lastKeyTimeRef.current;
+
+      // Single key: C -> Quick Add Task
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        setIsQuickAddOpen(true);
+        return;
+      }
+
+      // Single key: ? -> Keyboard shortcuts cheat-sheet
+      if (e.key === '?') {
+        e.preventDefault();
+        setIsShortcutsOpen(true);
+        return;
+      }
+
+      // Single key: / -> Open Command Palette search
+      if (e.key === '/') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+        return;
+      }
+
+      // Two-key chord: G then X
+      if (lastKey === 'g' && now - lastKeyTime < 1000) {
+        if (e.key === 'b' || e.key === 'B') {
+          e.preventDefault();
+          navigate('/sprints');
+        } else if (e.key === 't' || e.key === 'T') {
+          e.preventDefault();
+          navigate('/');
+        } else if (e.key === 'c' || e.key === 'C') {
+          e.preventDefault();
+          navigate('/checkin');
+        } else if (e.key === 'd' || e.key === 'D') {
+          e.preventDefault();
+          navigate('/digest');
+        } else if (e.key === 'p' || e.key === 'P') {
+          e.preventDefault();
+          navigate('/points');
+        } else if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          navigate('/appraisal');
+        }
+        lastKeyRef.current = '';
+        return;
+      }
+
+      if (e.key.toLowerCase() === 'g') {
+        lastKeyRef.current = 'g';
+        lastKeyTimeRef.current = now;
+      } else {
+        lastKeyRef.current = '';
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
+  return (
+    <AppLayout
+      onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+      onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+      onOpenShortcuts={() => setIsShortcutsOpen(true)}
+      onStartTour={() => setIsTourOpen(true)}
+    >
+      <Routes>
+        <Route path="/" element={<LandingPage onOpenQuickAdd={() => setIsQuickAddOpen(true)} />} />
+        <Route path="/checkin" element={<CheckinPage />} />
+        <Route path="/sprints" element={<SprintBoardPage />} />
+        <Route path="/points" element={<MyPointsPage />} />
+        <Route path="/appraisal" element={<AppraisalPage />} />
+        <Route path="/why-syncbrief" element={<WhySyncBriefPage />} />
+        <Route path="/hierarchy" element={<OrgHierarchyPage />} />
+        <Route path="/digest" element={<DigestPage />} />
+        <Route path="/blockers" element={<BlockerBoardPage />} />
+        <Route path="/channels" element={<ChannelSimulatorPage />} />
+        <Route path="/insights" element={<InsightsPage />} />
+        <Route path="/settings" element={<SettingsPrivacyPage />} />
+      </Routes>
+
+      {/* Modals & Overlays */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+        onStartTour={() => setIsTourOpen(true)}
+      />
+
+      <QuickAddTaskModal
+        isOpen={isQuickAddOpen}
+        onClose={() => setIsQuickAddOpen(false)}
+      />
+
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      <DemoScenarioButton />
+      <TourGuide isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
+    </AppLayout>
+  );
+};
+
+export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <Router>
-            <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
-              {/* Top Navigation */}
-              <Navbar onStartTour={() => setIsTourOpen(true)} />
-
-              {/* Main Content Area */}
-              <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-                <Routes>
-                  <Route path="/" element={<LandingPage />} />
-                  <Route path="/checkin" element={<CheckinPage />} />
-                  <Route path="/digest" element={<DigestPage />} />
-                  <Route path="/blockers" element={<BlockerBoardPage />} />
-                  <Route path="/channels" element={<ChannelSimulatorPage />} />
-                  <Route path="/insights" element={<InsightsPage />} />
-                  <Route path="/settings" element={<SettingsPrivacyPage />} />
-                </Routes>
-              </main>
-
-              {/* Floating Demo Scenario Action Button for Judges */}
-              <DemoScenarioButton />
-
-              {/* 3-Step Guided Product Tour */}
-              <TourGuide isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
-
-              {/* Footer */}
-              <footer className="border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400">
-                <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-700 dark:text-slate-300">SyncBrief AI</span>
-                    <span>&bull;</span>
-                    <span>Microsoft Innovate 2026 Hackathon Demo</span>
-                  </div>
-                  <div>
-                    <span>Async updates. Verifiable evidence. Zero status meetings.</span>
-                  </div>
-                </div>
-              </footer>
-            </div>
-          </Router>
+          <ToastProvider>
+            <Router>
+              <AppContent />
+            </Router>
+          </ToastProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

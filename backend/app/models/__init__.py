@@ -11,15 +11,25 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
-    role = Column(String(50), default="member")  # "manager", "member"
+    role = Column(String(50), default="member")  # "manager", "member", "admin"
     title = Column(String(255), default="Software Engineer")
     avatar_url = Column(String(500), nullable=True)
     timezone = Column(String(100), default="Asia/Kolkata")
     reminder_time = Column(String(20), default="09:30")
     streak_count = Column(Integer, default=3)
+    
+    # Hierarchy & RBAC
+    role_level = Column(Integer, default=5)  # 1 = Top (Director), 2 = Manager, 3 = Employee
+    reports_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    org_type = Column(String(50), default="engineering")
+    
+    # Security & Soft Delete
+    refresh_token = Column(String(500), nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    checkins = relationship("Checkin", back_populates="user")
+    checkins = relationship("Checkin", back_populates="user", cascade="all, delete-orphan")
+    manager = relationship("User", remote_side=[id], backref="direct_reports")
 
 class Channel(Base):
     __tablename__ = "channels"
@@ -48,12 +58,61 @@ class Message(Base):
 
     channel = relationship("Channel", back_populates="messages")
 
+class Sprint(Base):
+    __tablename__ = "sprints"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)  # e.g. "Sprint 42"
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    status = Column(String(50), default="active")  # "planned", "active", "closed"
+    goal = Column(Text, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    tasks = relationship("Task", back_populates="sprint")
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assignee_name = Column(String(255), default="")
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    priority = Column(String(20), default="Medium")  # "High", "Medium", "Low"
+    difficulty = Column(Integer, default=3)  # 1, 2, 3, 5, 8 (Fibonacci difficulty points)
+    status = Column(String(50), default="To do")  # "To do", "In progress", "Blocked", "Done"
+    progress_pct = Column(Integer, default=0)  # 0 to 100
+    sprint_id = Column(Integer, ForeignKey("sprints.id"), nullable=True)
+    carried_over_count = Column(Integer, default=0)
+    version = Column(Integer, default=1, nullable=False)  # Optimistic concurrency locking
+    deleted_at = Column(DateTime, nullable=True)  # Soft delete
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sprint = relationship("Sprint", back_populates="tasks")
+    assignee = relationship("User", foreign_keys=[assignee_id])
+
 class Checkin(Base):
     __tablename__ = "checkins"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     user_name = Column(String(255), nullable=False)
+    
+    # Task-based fields
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
+    task_title = Column(String(255), nullable=True)
+    progress_pct = Column(Integer, default=0)
+    progress_note = Column(Text, default="")
+    next_steps = Column(Text, default="")
+    sync_needed_with_json = Column(Text, default="[]")
+    other_task_ids_json = Column(Text, default="[]")
+
+    # Original fields for backward compatibility & rich standup summary
     yesterday = Column(Text, nullable=False)
     today = Column(Text, nullable=False)
     blockers_text = Column(Text, default="")
@@ -66,7 +125,30 @@ class Checkin(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="checkins")
+    task = relationship("Task")
     blockers = relationship("Blocker", back_populates="checkin", cascade="all, delete-orphan")
+
+    @property
+    def sync_needed_with(self):
+        try:
+            return json.loads(self.sync_needed_with_json or "[]")
+        except Exception:
+            return []
+
+    @sync_needed_with.setter
+    def sync_needed_with(self, val):
+        self.sync_needed_with_json = json.dumps(val or [])
+
+    @property
+    def other_task_ids(self):
+        try:
+            return json.loads(self.other_task_ids_json or "[]")
+        except Exception:
+            return []
+
+    @other_task_ids.setter
+    def other_task_ids(self, val):
+        self.other_task_ids_json = json.dumps(val or [])
 
 class Blocker(Base):
     __tablename__ = "blockers"
@@ -117,13 +199,21 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    action = Column(String(100), nullable=False) # e.g. "blocker_extraction", "digest_generation"
-    model_used = Column(String(100), nullable=False)
-    prompt_version = Column(String(50), nullable=False)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    actor_name = Column(String(255), nullable=True)
+    action = Column(String(100), nullable=False) # e.g. "CREATE_TASK", "UPDATE_TASK", "STATUS_CHANGE", "CLOSE_SPRINT", "ROLE_CHANGE", "DIGEST_GENERATED"
+    entity_type = Column(String(50), nullable=True) # e.g. "task", "sprint", "user", "point", "ai"
+    entity_id = Column(Integer, nullable=True)
+    old_values_json = Column(Text, nullable=True)
+    new_values_json = Column(Text, nullable=True)
+    model_used = Column(String(100), nullable=True)
+    prompt_version = Column(String(50), nullable=True)
     input_message_ids_json = Column(Text, default="[]")
     input_summary = Column(Text, default="")
     output_summary = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    actor = relationship("User", foreign_keys=[actor_id])
 
 class SystemSetting(Base):
     __tablename__ = "settings"

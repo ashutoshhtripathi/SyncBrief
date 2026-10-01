@@ -1,15 +1,56 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import json
 from typing import List, Optional
 from backend.app.database import get_db
-from backend.app.models import Checkin, Blocker, Message, Channel, User, AuditLog
+from backend.app.models import Checkin, Blocker, Message, Channel, User, AuditLog, Task
 from backend.app.schemas import CheckinCreate, CheckinResponse, BlockerResponse
 from backend.app.auth_deps import get_current_user
 from backend.app.ai import get_ai_provider, CitationValidator
+from backend.app.hierarchy import enforce_hierarchy_access
 
 router = APIRouter(prefix="/checkins", tags=["Check-ins"])
+
+def checkin_to_response(c: Checkin) -> dict:
+    blockers_list = []
+    for b in c.blockers:
+        blockers_list.append({
+            "id": b.id,
+            "summary": b.summary,
+            "severity": b.severity,
+            "status": b.status,
+            "owner_name": b.owner_name,
+            "blocked_by": b.blocked_by,
+            "related_work_item": b.related_work_item,
+            "confidence": b.confidence,
+            "citations": b.citations,
+            "devops_work_item_id": b.devops_work_item_id,
+            "created_at": b.created_at
+        })
+    return {
+        "id": c.id,
+        "user_id": c.user_id,
+        "user_name": c.user_name,
+        "task_id": c.task_id,
+        "task_title": c.task_title,
+        "progress_pct": c.progress_pct or 0,
+        "progress_note": c.progress_note or "",
+        "next_steps": c.next_steps or "",
+        "sync_needed_with": c.sync_needed_with,
+        "other_task_ids": c.other_task_ids,
+        "yesterday": c.yesterday,
+        "today": c.today,
+        "blockers_text": c.blockers_text,
+        "mood": c.mood,
+        "pr_link": c.pr_link,
+        "work_item_id": c.work_item_id,
+        "status": c.status,
+        "streak_count": c.streak_count,
+        "ai_processed": c.ai_processed,
+        "created_at": c.created_at,
+        "blockers": blockers_list
+    }
 
 @router.post("", response_model=CheckinResponse)
 async def submit_checkin(
@@ -18,19 +59,60 @@ async def submit_checkin(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Submit a 60-second standup check-in.
-    Automatically triggers AI blocker extraction and strict citation validation against opted-in channels.
+    Submit a task-based 60-second standup check-in.
+    Updates task progress, triggers AI blocker detection with verifiable citations.
     """
     # 1. Update streak
     current_user.streak_count = (current_user.streak_count or 0) + 1
     db.add(current_user)
 
-    # 2. Create Checkin record
+    # 2. Resolve task association
+    task_title = req.task_title
+    task = None
+    if req.task_id:
+        task = db.query(Task).filter(Task.id == req.task_id).first()
+        if task:
+            task_title = task.title
+            if req.progress_pct is not None:
+                task.progress_pct = req.progress_pct
+                if req.progress_pct >= 100:
+                    task.status = "Done"
+                    task.completed_at = datetime.utcnow()
+                elif task.status == "To do" and req.progress_pct > 0:
+                    task.status = "In progress"
+
+    # Smart textual fallbacks
+    yesterday_text = req.yesterday or ""
+    if not yesterday_text:
+        if task_title and req.progress_note:
+            yesterday_text = f"Worked on '{task_title}' ({req.progress_pct}%): {req.progress_note}"
+        elif req.progress_note:
+            yesterday_text = req.progress_note
+        else:
+            yesterday_text = "Progressed on sprint deliverables."
+
+    today_text = req.today or ""
+    if not today_text:
+        if req.next_steps:
+            today_text = req.next_steps
+        elif task_title:
+            today_text = f"Continuing focus on '{task_title}'."
+        else:
+            today_text = "Continuing scheduled sprint tasks."
+
+    # 3. Create Checkin record
     checkin = Checkin(
         user_id=current_user.id,
         user_name=current_user.full_name,
-        yesterday=req.yesterday,
-        today=req.today,
+        task_id=req.task_id,
+        task_title=task_title,
+        progress_pct=req.progress_pct or 0,
+        progress_note=req.progress_note or "",
+        next_steps=req.next_steps or "",
+        sync_needed_with_json=json.dumps(req.sync_needed_with or []),
+        other_task_ids_json=json.dumps(req.other_task_ids or []),
+        yesterday=yesterday_text,
+        today=today_text,
         blockers_text=req.blockers_text or "",
         mood=req.mood,
         pr_link=req.pr_link,
@@ -44,8 +126,12 @@ async def submit_checkin(
 
     extracted_blocker_responses = []
 
-    # 3. If blockers are mentioned and status is submitted, run AI Blocker Extraction
-    if req.status == "submitted" and req.blockers_text and req.blockers_text.lower() not in ["none", "no blockers", "n/a", "nil", "nothing"]:
+    # 4. If blockers are mentioned and status is submitted, run AI Blocker Extraction
+    has_blockers = req.blockers_text and req.blockers_text.lower() not in ["none", "no blockers", "n/a", "nil", "nothing"]
+    if req.status == "submitted" and has_blockers:
+        if task and task.status != "Done":
+            task.status = "Blocked"
+
         # Fetch messages ONLY from opted-in channels (Privacy First!)
         opted_in_channels = db.query(Channel).filter(Channel.is_syncbrief_enabled == True).all()
         channel_ids = [c.id for c in opted_in_channels]
@@ -65,8 +151,8 @@ async def submit_checkin(
 
         checkin_payload = {
             "user_name": current_user.full_name,
-            "yesterday": req.yesterday,
-            "today": req.today,
+            "yesterday": yesterday_text,
+            "today": today_text,
             "blockers_text": req.blockers_text,
             "pr_link": req.pr_link,
             "work_item_id": req.work_item_id
@@ -75,7 +161,7 @@ async def submit_checkin(
         ai_provider = get_ai_provider()
         raw_blockers = await ai_provider.extract_blockers(checkin_payload, messages_payload)
 
-        # 4. Strict Citation Validation step
+        # Strict Citation Validation step
         for b_data in raw_blockers:
             raw_citations = b_data.get("citations", [])
             validated_citations = CitationValidator.validate_citations(raw_citations, db)
@@ -108,7 +194,7 @@ async def submit_checkin(
                 "created_at": blocker_model.created_at
             })
 
-        # 5. Audit Log Entry
+        # Audit Log Entry
         audit = AuditLog(
             action="blocker_extraction",
             model_used=ai_provider.name,
@@ -122,107 +208,50 @@ async def submit_checkin(
 
     db.commit()
     db.refresh(checkin)
-
-    return {
-        "id": checkin.id,
-        "user_id": checkin.user_id,
-        "user_name": checkin.user_name,
-        "yesterday": checkin.yesterday,
-        "today": checkin.today,
-        "blockers_text": checkin.blockers_text,
-        "mood": checkin.mood,
-        "pr_link": checkin.pr_link,
-        "work_item_id": checkin.work_item_id,
-        "status": checkin.status,
-        "streak_count": checkin.streak_count,
-        "ai_processed": checkin.ai_processed,
-        "created_at": checkin.created_at,
-        "blockers": extracted_blocker_responses
-    }
+    return checkin_to_response(checkin)
 
 @router.get("", response_model=List[CheckinResponse])
 def get_checkins(
     user_id: Optional[int] = None,
     limit: int = 50,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Retrieve team check-in history."""
+    """
+    Retrieve team check-in history.
+    ENFORCES HIERARCHY ACCESS:
+    If user_id is requested and is not current_user, verifies current_user can view user_id.
+    Peers cannot view another peer's check-ins (403 Forbidden).
+    """
+    if user_id is not None:
+        enforce_hierarchy_access(current_user, user_id, db)
+
     query = db.query(Checkin).order_by(Checkin.created_at.desc())
     if user_id:
         query = query.filter(Checkin.user_id == user_id)
     checkins = query.limit(limit).all()
 
-    result = []
-    for c in checkins:
-        blockers_list = []
-        for b in c.blockers:
-            blockers_list.append({
-                "id": b.id,
-                "summary": b.summary,
-                "severity": b.severity,
-                "status": b.status,
-                "owner_name": b.owner_name,
-                "blocked_by": b.blocked_by,
-                "related_work_item": b.related_work_item,
-                "confidence": b.confidence,
-                "citations": b.citations,
-                "devops_work_item_id": b.devops_work_item_id,
-                "created_at": b.created_at
-            })
-        result.append({
-            "id": c.id,
-            "user_id": c.user_id,
-            "user_name": c.user_name,
-            "yesterday": c.yesterday,
-            "today": c.today,
-            "blockers_text": c.blockers_text,
-            "mood": c.mood,
-            "pr_link": c.pr_link,
-            "work_item_id": c.work_item_id,
-            "status": c.status,
-            "streak_count": c.streak_count,
-            "ai_processed": c.ai_processed,
-            "created_at": c.created_at,
-            "blockers": blockers_list
-        })
-    return result
+    return [checkin_to_response(c) for c in checkins]
 
 @router.get("/today", response_model=List[CheckinResponse])
 def get_today_checkins(db: Session = Depends(get_db)):
     """Fetch all check-ins submitted in the last 24 hours."""
     since = datetime.utcnow() - timedelta(hours=24)
     checkins = db.query(Checkin).filter(Checkin.created_at >= since).order_by(Checkin.created_at.desc()).all()
-    result = []
-    for c in checkins:
-        result.append({
-            "id": c.id,
-            "user_id": c.user_id,
-            "user_name": c.user_name,
-            "yesterday": c.yesterday,
-            "today": c.today,
-            "blockers_text": c.blockers_text,
-            "mood": c.mood,
-            "pr_link": c.pr_link,
-            "work_item_id": c.work_item_id,
-            "status": c.status,
-            "streak_count": c.streak_count,
-            "ai_processed": c.ai_processed,
-            "created_at": c.created_at,
-            "blockers": [
-                {
-                    "id": b.id,
-                    "summary": b.summary,
-                    "severity": b.severity,
-                    "status": b.status,
-                    "owner_name": b.owner_name,
-                    "blocked_by": b.blocked_by,
-                    "related_work_item": b.related_work_item,
-                    "confidence": b.confidence,
-                    "citations": b.citations,
-                    "devops_work_item_id": b.devops_work_item_id,
-                    "created_at": b.created_at
-                }
-                for b in c.blockers
-            ]
-        })
-    return result
+    return [checkin_to_response(c) for c in checkins]
+
+@router.get("/last-task")
+def get_user_last_checkin_task(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Returns previous task from user's last check-in for smart pre-fill (<60s check-in)."""
+    last_checkin = db.query(Checkin).filter(Checkin.user_id == current_user.id).order_by(Checkin.id.desc()).first()
+    if last_checkin and last_checkin.task_id:
+        return {
+            "task_id": last_checkin.task_id,
+            "task_title": last_checkin.task_title,
+            "progress_pct": last_checkin.progress_pct or 0,
+            "next_steps": last_checkin.next_steps or ""
+        }
+    return None
