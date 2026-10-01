@@ -11,8 +11,12 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('syncbrief_theme');
-    if (saved === 'dark' || saved === 'light') return saved;
+    try {
+      const saved = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('syncbrief_theme') : null;
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch {
+      // ignore in SSR / environments without storage
+    }
     return 'light'; // Clean Fluent light mode by default
   });
 
@@ -23,7 +27,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('syncbrief_theme', theme);
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('syncbrief_theme', theme);
+      }
+    } catch {
+      // ignore
+    }
   }, [theme]);
 
   const toggleTheme = () => {

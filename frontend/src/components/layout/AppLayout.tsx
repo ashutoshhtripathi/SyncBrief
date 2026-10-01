@@ -123,8 +123,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {/* Brand Header */}
         <div className="h-14 px-3.5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80">
           <Link to="/" className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 via-sky-600 to-indigo-600 text-white flex items-center justify-center shadow-xs p-1 shrink-0">
-              <img src="/favicon.svg" alt="SyncBrief AI" className="w-full h-full" />
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow-md shadow-sky-500/15 hover:scale-105 transition-transform duration-200 shrink-0 overflow-hidden ring-1 ring-white/10">
+              <img src="/favicon.svg" alt="SyncBrief AI" className="w-full h-full object-contain" />
             </div>
             {!isCollapsed && (
               <div className="flex items-center gap-1.5 leading-none">
@@ -388,8 +388,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <img src="/favicon.svg" alt="SyncBrief AI" className="w-6 h-6" />
+              <div className="flex items-center gap-2.5">
+                <img src="/favicon.svg" alt="SyncBrief AI" className="w-7 h-7 rounded-xl object-contain shadow-xs" />
                 <span className="font-bold text-sm text-slate-900 dark:text-white">SyncBrief AI</span>
               </div>
               <button

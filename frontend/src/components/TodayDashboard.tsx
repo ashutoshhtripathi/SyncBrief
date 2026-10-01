@@ -65,13 +65,15 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
   const isManagerOrDirector = user?.role === 'manager' || user?.role === 'director' || user?.role === 'admin' || (user?.role_level !== undefined && user.role_level <= 2);
 
   // Getting started checklist state
+  const getStorage = () => (typeof window !== 'undefined' ? window.localStorage : null);
+
   const [checklistDismissed, setChecklistDismissed] = useState<boolean>(() => {
-    return localStorage.getItem('syncbrief_checklist_dismissed') === 'true';
+    return getStorage()?.getItem('syncbrief_checklist_dismissed') === 'true';
   });
 
   const [completedSteps, setCompletedSteps] = useState<string[]>(() => {
     try {
-      const stored = localStorage.getItem('syncbrief_completed_steps');
+      const stored = getStorage()?.getItem('syncbrief_completed_steps');
       return stored ? JSON.parse(stored) : ['sign_in'];
     } catch {
       return ['sign_in'];
@@ -83,7 +85,7 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
     if (todayCheckin && !completedSteps.includes('check_in')) {
       setCompletedSteps((prev) => {
         const next = [...prev, 'check_in'];
-        localStorage.setItem('syncbrief_completed_steps', JSON.stringify(next));
+        getStorage()?.setItem('syncbrief_completed_steps', JSON.stringify(next));
         return next;
       });
     }
@@ -93,20 +95,20 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
     if (stepId === 'sign_in') return;
     setCompletedSteps((prev) => {
       const next = prev.includes(stepId) ? prev.filter((s) => s !== stepId) : [...prev, stepId];
-      localStorage.setItem('syncbrief_completed_steps', JSON.stringify(next));
+      getStorage()?.setItem('syncbrief_completed_steps', JSON.stringify(next));
       return next;
     });
   };
 
   const handleDismissChecklist = () => {
     setChecklistDismissed(true);
-    localStorage.setItem('syncbrief_checklist_dismissed', 'true');
+    getStorage()?.setItem('syncbrief_checklist_dismissed', 'true');
     toast.info('Getting Started checklist hidden. You can reopen it anytime.');
   };
 
   const handleResetChecklist = () => {
     setChecklistDismissed(false);
-    localStorage.removeItem('syncbrief_checklist_dismissed');
+    getStorage()?.removeItem('syncbrief_checklist_dismissed');
   };
 
   const checklistItems = [

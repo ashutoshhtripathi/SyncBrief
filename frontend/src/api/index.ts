@@ -18,8 +18,10 @@ import {
 
 const API_BASE = '/api';
 
+const getStorage = () => (typeof window !== 'undefined' ? window.localStorage : null);
+
 export function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem('syncbrief_token');
+  const token = getStorage()?.getItem('syncbrief_token');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -43,8 +45,9 @@ export async function demoLogin(role: 'manager' | 'member' | 'admin' = 'manager'
   });
   if (!res.ok) throw new Error('Demo login failed');
   const data = await res.json();
-  localStorage.setItem('syncbrief_token', data.access_token);
-  localStorage.setItem('syncbrief_user', JSON.stringify(data.user));
+  const storage = getStorage();
+  storage?.setItem('syncbrief_token', data.access_token);
+  storage?.setItem('syncbrief_user', JSON.stringify(data.user));
   return data;
 }
 
@@ -59,8 +62,9 @@ export async function loginWithCredentials(email: string, password = 'demo1234')
     throw new Error(err.detail || 'Login failed');
   }
   const data = await res.json();
-  localStorage.setItem('syncbrief_token', data.access_token);
-  localStorage.setItem('syncbrief_user', JSON.stringify(data.user));
+  const storage = getStorage();
+  storage?.setItem('syncbrief_token', data.access_token);
+  storage?.setItem('syncbrief_user', JSON.stringify(data.user));
   return data;
 }
 
@@ -289,7 +293,7 @@ export async function fetchAppraisalReport(quarter = 'Q3 2026'): Promise<Apprais
 }
 
 export function getAppraisalCsvDownloadUrl(quarter = 'Q3 2026'): string {
-  const token = localStorage.getItem('syncbrief_token') || '';
+  const token = getStorage()?.getItem('syncbrief_token') || '';
   return `${API_BASE}/points/appraisal/export/csv?quarter=${encodeURIComponent(quarter)}&token=${encodeURIComponent(token)}`;
 }
 

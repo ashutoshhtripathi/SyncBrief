@@ -1,37 +1,126 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <linearGradient id="sbGradientPrimary" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0078D4" />
-      <stop offset="50%" stop-color="#2563EB" />
-      <stop offset="100%" stop-color="#06B6D4" />
+    <!-- Background Squircle Glow & Gradient -->
+    <linearGradient id="sbBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#090D16" />
+      <stop offset="100%" stop-color="#030712" />
     </linearGradient>
-    <linearGradient id="sbGradientFold" x1="24" y1="14" x2="34" y2="24" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#60A5FA" />
-      <stop offset="100%" stop-color="#2563EB" />
+
+    <!-- Border Metallic Iridescent Gradient -->
+    <linearGradient id="sbBorderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.8" />
+      <stop offset="40%" stop-color="#6366F1" stop-opacity="0.5" />
+      <stop offset="70%" stop-color="#A855F7" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#06B6D4" stop-opacity="0.8" />
     </linearGradient>
-    <filter id="sbShadow" x="-10%" y="-10%" width="120%" height="120%" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#004880" flood-opacity="0.3" />
+
+    <!-- Main Sync Ribbon 1: Electric Blue to Cyan -->
+    <linearGradient id="sbRibbonTop" x1="12" y1="12" x2="52" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00F2FE" />
+      <stop offset="35%" stop-color="#38BDF8" />
+      <stop offset="70%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#4F46E5" />
+    </linearGradient>
+
+    <!-- Main Sync Ribbon 2: Violet Indigo to Vivid Fuchsia -->
+    <linearGradient id="sbRibbonBottom" x1="52" y1="52" x2="12" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#EC4899" />
+      <stop offset="30%" stop-color="#A855F7" />
+      <stop offset="70%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+
+    <!-- Central Kinetic Bolt Gradient -->
+    <linearGradient id="sbBoltGrad" x1="32" y1="14" x2="32" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="30%" stop-color="#E0F2FE" />
+      <stop offset="70%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+
+    <!-- Inner Ambient Radial Glow -->
+    <radialGradient id="sbCoreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.35" />
+      <stop offset="45%" stop-color="#6366F1" stop-opacity="0.2" />
+      <stop offset="85%" stop-color="#0284C7" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Drop Glow Filter for High-Impact Pop -->
+    <filter id="sbNeonGlow" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
     </filter>
+
+    <!-- Subtle Shadow for Bolt Depth -->
+    <filter id="sbBoltShadow" x="-30%" y="-30%" width="160%" height="160%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0369A1" flood-opacity="0.6" />
+    </filter>
+
+    <!-- Glass Specular Highlight Gradient -->
+    <linearGradient id="sbGlassGlint" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
   </defs>
 
-  <!-- Outer Synchronize Arc 1 (Top-Right) -->
-  <path d="M24 6C33.941 6 42 14.059 42 24C42 27.2 41.16 30.2 39.7 32.8" stroke="url(#sbGradientPrimary)" stroke-width="3.5" stroke-linecap="round" />
-  <polyline points="43,26 43,34 35,34" fill="none" stroke="url(#sbGradientPrimary)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- 1. Background Squircle with Subtle Dark Surface -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#sbBgGrad)" />
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#sbCoreGlow)" />
+  
+  <!-- 2. Precision Glowing Metallic Stroke -->
+  <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" stroke="url(#sbBorderGrad)" stroke-width="1.2" />
 
-  <!-- Outer Synchronize Arc 2 (Bottom-Left) -->
-  <path d="M24 42C14.059 42 6 33.941 6 24C6 20.8 6.84 17.8 8.3 15.2" stroke="url(#sbGradientPrimary)" stroke-width="3.5" stroke-linecap="round" />
-  <polyline points="5,22 5,14 13,14" fill="none" stroke="url(#sbGradientPrimary)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- 3. Glass Specular Edge (Top Bevel) -->
+  <path d="M4 18 C 4 10.268, 10.268 4, 18 4 L 46 4 C 53.732 4, 60 10.268, 60 18 C 60 22, 50 18, 32 18 C 14 18, 4 22, 4 18 Z" fill="url(#sbGlassGlint)" />
 
-  <!-- Center Document / Brief with Folded Corner -->
-  <g filter="url(#sbShadow)">
-    <!-- Base Page -->
-    <path d="M16 14C16 12.895 16.895 12 18 12H27L33 18V34C33 35.105 32.105 36 31 36H18C16.895 36 16 35.105 16 34V14Z" fill="url(#sbGradientPrimary)" />
-    <!-- Fold Corner Accent -->
-    <path d="M27 12V17C27 17.552 27.448 18 28 18H33L27 12Z" fill="#93C5FD" />
-    
-    <!-- Brief Content Lines -->
-    <line x1="19.5" y1="22" x2="29.5" y2="22" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
-    <line x1="19.5" y1="26" x2="27.5" y2="26" stroke="#E0F2FE" stroke-width="1.8" stroke-linecap="round" />
-    <line x1="19.5" y1="30" x2="24" y2="30" stroke="#BAE6FD" stroke-width="1.8" stroke-linecap="round" />
+  <!-- 4. Upper 'S' Sync Orbital Ribbon (Cyan to Blue) -->
+  <g filter="url(#sbNeonGlow)">
+    <path 
+      d="M48 20 C48 14.5 42 11 34 11 C22 11 16 17 16 25 C16 33.5 25 35 34 37 C41 38.5 45 41.5 45 46" 
+      stroke="url(#sbRibbonTop)" 
+      stroke-width="5" 
+      stroke-linecap="round" 
+    />
   </g>
+
+  <!-- 5. Lower 'S' Sync Orbital Ribbon (Indigo to Magenta) -->
+  <g filter="url(#sbNeonGlow)">
+    <path 
+      d="M16 44 C16 49.5 22 53 30 53 C42 53 48 47 48 39 C48 30.5 39 29 30 27 C23 25.5 19 22.5 19 18" 
+      stroke="url(#sbRibbonBottom)" 
+      stroke-width="5" 
+      stroke-linecap="round" 
+    />
+  </g>
+
+  <!-- 6. Central Supercharged Lightning Bolt (⚡ Kinetic Precision & Instant Brief) -->
+  <g filter="url(#sbBoltShadow)">
+    <polygon 
+      points="35.5,12 21.5,31 31.5,31 27.5,52 43.5,29 33.5,29" 
+      fill="url(#sbBoltGrad)" 
+    />
+    <!-- Hyper-bright Core Shimmer -->
+    <polygon 
+      points="35.2,14 24.5,30 32,30 29.5,47 40.5,30 33.5,30" 
+      fill="#FFFFFF" 
+      opacity="0.9"
+    />
+  </g>
+
+  <!-- 7. Dynamic Quantum Sync Beacons (Pulse Nodes) -->
+  <!-- Top-Right Orbit Beacon -->
+  <circle cx="48" cy="20" r="2.8" fill="#38BDF8" />
+  <circle cx="48" cy="20" r="1.4" fill="#FFFFFF" />
+
+  <!-- Bottom-Left Orbit Beacon -->
+  <circle cx="16" cy="44" r="2.8" fill="#F43F5E" />
+  <circle cx="16" cy="44" r="1.4" fill="#FFFFFF" />
+
+  <!-- Center Energy Spark -->
+  <circle cx="32" cy="30" r="1.8" fill="#FFFFFF" />
 </svg>

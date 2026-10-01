@@ -22,7 +22,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const u = await getCurrentUser();
       setUser(u);
-      localStorage.setItem('syncbrief_user', JSON.stringify(u));
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('syncbrief_user', JSON.stringify(u));
+      }
     } catch {
       // ignore
     }
@@ -31,8 +33,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     async function initAuth() {
       try {
-        const storedUser = localStorage.getItem('syncbrief_user');
-        const token = localStorage.getItem('syncbrief_token');
+        const storage = typeof window !== 'undefined' ? window.localStorage : null;
+        const storedUser = storage?.getItem('syncbrief_user');
+        const token = storage?.getItem('syncbrief_token');
         if (storedUser && token) {
           setUser(JSON.parse(storedUser));
         } else {
@@ -70,8 +73,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    localStorage.removeItem('syncbrief_token');
-    localStorage.removeItem('syncbrief_user');
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem('syncbrief_token');
+      window.localStorage.removeItem('syncbrief_user');
+    }
     setUser(null);
   };
 

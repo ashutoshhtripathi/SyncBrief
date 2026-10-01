@@ -114,10 +114,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Brand with New Modern SVG Logo */}
         <Link to="/" className="flex items-center gap-2.5 group shrink-0">
           <div className="relative">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-sky-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/25 group-hover:scale-105 transition-all duration-200 p-1.5">
-              <img src="/favicon.svg" alt="SyncBrief AI Logo" className="w-full h-full drop-shadow-xs" />
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shadow-sky-500/20 group-hover:scale-105 group-hover:shadow-sky-500/35 transition-all duration-200 overflow-hidden ring-1 ring-white/10">
+              <img src="/favicon.svg" alt="SyncBrief AI Logo" className="w-full h-full object-contain" />
             </div>
-            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" />
+            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full shadow-xs" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
