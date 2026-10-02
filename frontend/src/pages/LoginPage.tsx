@@ -40,6 +40,7 @@ export const LoginPage: React.FC = () => {
       if (typeof window !== 'undefined' && window.sessionStorage) {
         window.sessionStorage.setItem('syncbrief_oauth_state', startData.state);
         window.sessionStorage.setItem('syncbrief_oauth_provider', 'google');
+        window.sessionStorage.setItem(`syncbrief_state_${startData.state}`, 'google');
       }
       window.location.href = startData.authorization_url;
     } catch (err: any) {
@@ -56,6 +57,7 @@ export const LoginPage: React.FC = () => {
       if (typeof window !== 'undefined' && window.sessionStorage) {
         window.sessionStorage.setItem('syncbrief_oauth_state', startData.state);
         window.sessionStorage.setItem('syncbrief_oauth_provider', 'microsoft');
+        window.sessionStorage.setItem(`syncbrief_state_${startData.state}`, 'microsoft');
         if (startData.code_verifier) {
           window.sessionStorage.setItem('syncbrief_pkce_verifier', startData.code_verifier);
         }

@@ -19,7 +19,9 @@ import {
   PerformanceSummaryEmployee,
   PerformanceAppraisalEvidenceResponse,
   OAuthConfig,
-  OAuthCallbackPayload
+  OAuthCallbackPayload,
+  OAuthPendingResponse,
+  OAuthPasswordVerifyPayload
 } from '../types';
 
 const API_BASE = '/api';
@@ -140,7 +142,7 @@ export async function startOAuthFlow(provider: 'google' | 'microsoft'): Promise<
   return res.json();
 }
 
-export async function exchangeOAuthCode(payload: OAuthCallbackPayload): Promise<{ access_token: string; refresh_token?: string; user: User }> {
+export async function exchangeOAuthCode(payload: OAuthCallbackPayload): Promise<OAuthPendingResponse> {
   const res = await fetch(`${API_BASE}/auth/oauth/callback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -149,6 +151,19 @@ export async function exchangeOAuthCode(payload: OAuthCallbackPayload): Promise<
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'OAuth authentication failed' }));
     throw new Error(err.detail || 'OAuth authentication failed');
+  }
+  return res.json();
+}
+
+export async function verifyOAuthPassword(payload: OAuthPasswordVerifyPayload): Promise<{ access_token: string; refresh_token?: string; user: User }> {
+  const res = await fetch(`${API_BASE}/auth/oauth/verify-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Incorrect SyncBrief password.' }));
+    throw new Error(err.detail || 'Incorrect SyncBrief password.');
   }
   const data = await res.json();
   const storage = getStorage();
@@ -444,6 +459,7 @@ export async function fetchAllUsers(): Promise<User[]> {
 export async function createUser(payload: {
   email: string;
   password?: string;
+  confirm_password?: string;
   full_name: string;
   role?: string;
   title?: string;

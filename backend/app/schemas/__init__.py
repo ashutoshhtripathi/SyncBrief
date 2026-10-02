@@ -25,6 +25,19 @@ class OAuthCallbackRequest(BaseModel):
     code: str
     redirect_uri: str
     code_verifier: Optional[str] = None
+    state: Optional[str] = None
+
+class OAuthPendingResponse(BaseModel):
+    requires_password_verification: bool = True
+    pending_token: str
+    email: str
+    provider: str
+    user_name: Optional[str] = None
+
+class OAuthPasswordVerifyRequest(BaseModel):
+    pending_token: str
+    password: str
+
 
 class OAuthProviderConfig(BaseModel):
     enabled: bool
@@ -72,7 +85,8 @@ class UserProfile(BaseModel):
 
 class UserCreate(BaseModel):
     email: str
-    password: str = "demo1234"
+    password: str = Field(..., min_length=6, description="Initial password for the user account")
+    confirm_password: Optional[str] = Field(None, description="Confirmation of initial password")
     full_name: str
     role: str = "member"
     title: str = "Software Engineer"
@@ -94,6 +108,33 @@ class UserUpdate(BaseModel):
     role_level: Optional[int] = None
     reports_to_id: Optional[int] = None
     org_type: Optional[str] = None
+
+# --- Organization Invitation Schemas ---
+class InvitationCreate(BaseModel):
+    email: str
+    full_name: Optional[str] = None
+    role: str = "member"
+    role_level: int = 3
+    title: str = "Software Engineer"
+    reports_to_id: Optional[int] = None
+    org_type: str = "engineering"
+
+class InvitationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tenant_id: int
+    email: str
+    full_name: Optional[str] = None
+    role: str
+    role_level: int
+    title: str
+    reports_to_id: Optional[int] = None
+    org_type: str
+    invited_by_id: int
+    status: str
+    created_at: datetime
+    accepted_at: Optional[datetime] = None
 
 # --- Sprint Schemas ---
 class SprintCreate(BaseModel):

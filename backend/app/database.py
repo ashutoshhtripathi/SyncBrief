@@ -1,10 +1,11 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from backend.app.config import settings
 
 connect_args = {}
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args["check_same_thread"] = False
+    connect_args["timeout"] = 30.0
 
 engine = create_engine(
     settings.DATABASE_URL,
@@ -12,14 +13,24 @@ engine = create_engine(
     echo=False
 )
 
+if settings.DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA busy_timeout=30000;")
+        cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 def run_migrations():
     """Ensure SQLite columns added in newer versions exist without dropping existing tables."""
-    from sqlalchemy import text
     try:
         with engine.connect() as conn:
+            if settings.DATABASE_URL.startswith("sqlite"):
+                conn.execute(text("PRAGMA journal_mode=WAL;"))
+                conn.execute(text("PRAGMA busy_timeout=30000;"))
             # 1. Ensure tenants table exists and has default tenant
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS tenants (

@@ -38,6 +38,7 @@ const queryClient = new QueryClient({
 describe('Authentication & User Profile Flow', () => {
   beforeEach(() => {
     mockLocalStorage.clear();
+    mockSessionStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -596,7 +597,7 @@ describe('Authentication & User Profile Flow', () => {
     });
   });
 
-  it('OAuthCallbackPage successfully handles code exchange and sets up user session', async () => {
+  it('OAuthCallbackPage successfully prompts for SyncBrief password after OAuth and completes session setup', async () => {
     mockSessionStorage.setItem('syncbrief_oauth_state', 'expected-state-xyz');
     mockSessionStorage.setItem('syncbrief_oauth_provider', 'google');
 
@@ -616,11 +617,30 @@ describe('Authentication & User Profile Flow', () => {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
-            access_token: 'valid-oauth-session-token',
-            refresh_token: 'valid-refresh-token',
-            token_type: 'bearer',
-            user: mockOAuthUser,
+            requires_password_verification: true,
+            pending_token: 'valid-pending-oauth-token',
+            email: 'oauth.developer@syncbrief.ai',
+            provider: 'google',
+            user_name: 'OAuth Developer',
           }),
+        });
+      }
+      if (url.includes('/api/auth/oauth/verify-password')) {
+        const body = JSON.parse(opts?.body || '{}');
+        if (body.password === 'demo1234') {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              access_token: 'valid-oauth-session-token',
+              refresh_token: 'valid-refresh-token',
+              token_type: 'bearer',
+              user: mockOAuthUser,
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ detail: 'Incorrect SyncBrief password.' }),
         });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -639,6 +659,19 @@ describe('Authentication & User Profile Flow', () => {
     // Verifies loading state is rendered during processing
     expect(screen.getByText(/Completing Google Identity Sign-In/i)).toBeDefined();
 
+    // Verifies transition to dedicated SyncBrief password verification screen
+    await waitFor(() => {
+      expect(screen.getByText(/Verify your SyncBrief password/i)).toBeDefined();
+      expect(screen.getByText('oauth.developer@syncbrief.ai')).toBeDefined();
+    });
+
+    // Enter correct password and submit
+    const passwordInput = screen.getByPlaceholderText(/Enter your SyncBrief password/i);
+    fireEvent.change(passwordInput, { target: { value: 'demo1234' } });
+
+    const continueBtn = screen.getByRole('button', { name: /Continue/i });
+    fireEvent.click(continueBtn);
+
     // Verifies storage updated with received token and user
     await waitFor(() => {
       expect(mockLocalStorage.getItem('syncbrief_token')).toBe('valid-oauth-session-token');
@@ -647,6 +680,236 @@ describe('Authentication & User Profile Flow', () => {
       // Verifies transient oauth state cleaned up
       expect(mockSessionStorage.getItem('syncbrief_oauth_state')).toBeNull();
     });
+  });
+
+  it('OAuthCallbackPage rejects incorrect password and prevents application session creation', async () => {
+    mockSessionStorage.setItem('syncbrief_oauth_state', 'expected-state-xyz');
+    mockSessionStorage.setItem('syncbrief_oauth_provider', 'microsoft');
+
+    (globalThis as any).fetch = vi.fn().mockImplementation((url: string, opts?: any) => {
+      if (url.includes('/api/auth/oauth/callback')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            requires_password_verification: true,
+            pending_token: 'valid-pending-token',
+            email: 'vikram.joshi@syncbrief.ai',
+            provider: 'microsoft',
+            user_name: 'Vikram Joshi',
+          }),
+        });
+      }
+      if (url.includes('/api/auth/oauth/verify-password')) {
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ detail: 'Incorrect SyncBrief password.' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/auth/callback?code=mock-code&state=expected-state-xyz']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <OAuthCallbackPage />
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Verify your SyncBrief password/i)).toBeDefined();
+      expect(screen.getByText('vikram.joshi@syncbrief.ai')).toBeDefined();
+    });
+
+    const passwordInput = screen.getByPlaceholderText(/Enter your SyncBrief password/i);
+    fireEvent.change(passwordInput, { target: { value: 'WrongPassword999!' } });
+
+    const continueBtn = screen.getByRole('button', { name: /Continue/i });
+    fireEvent.click(continueBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Incorrect SyncBrief password/i)).toBeDefined();
+      // Verifies NO session is stored
+      expect(mockLocalStorage.getItem('syncbrief_token')).toBeNull();
+    });
+  });
+
+  it('OAuthCallbackPage does NOT submit authorization code twice on re-renders', async () => {
+    mockSessionStorage.setItem('syncbrief_oauth_state', 'strict-state-123');
+    mockSessionStorage.setItem('syncbrief_oauth_provider', 'google');
+
+    const callbackSpy = vi.fn().mockImplementation(() => {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          requires_password_verification: true,
+          pending_token: 'pending-token-strict',
+          email: 'strict.test@syncbrief.ai',
+          provider: 'google',
+          user_name: 'Strict Test',
+        }),
+      });
+    });
+
+    (globalThis as any).fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/auth/oauth/callback')) {
+        return callbackSpy();
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/auth/callback?code=strict-single-code&state=strict-state-123']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <OAuthCallbackPage />
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    // Re-render immediately as React StrictMode would
+    rerender(
+      <MemoryRouter initialEntries={['/auth/callback?code=strict-single-code&state=strict-state-123']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <OAuthCallbackPage />
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Verify your SyncBrief password/i)).toBeDefined();
+    });
+
+    // Exchange MUST be executed strictly ONCE
+    expect(callbackSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('OAuthCallbackPage displays clean error message when Google sign-in expires or was already used', async () => {
+    mockSessionStorage.setItem('syncbrief_oauth_state', 'invalid-grant-state');
+    mockSessionStorage.setItem('syncbrief_oauth_provider', 'google');
+
+    (globalThis as any).fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/auth/oauth/callback')) {
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({
+            detail: 'Google sign-in expired or was already used. Please try again.',
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/auth/callback?code=expired-grant-code&state=invalid-grant-state']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <OAuthCallbackPage />
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Single Sign-On Failed/i)).toBeDefined();
+      expect(screen.getByText(/Google sign-in expired or was already used\. Please try again\./i)).toBeDefined();
+    });
+  });
+
+  it('OAuthCallbackPage blocks duplicate code submission from browser reload using sessionStorage guard', async () => {
+    mockSessionStorage.setItem('syncbrief_oauth_state', 'consumed-state');
+    mockSessionStorage.setItem('syncbrief_oauth_provider', 'google');
+    mockSessionStorage.setItem('syncbrief_consumed_code_already-consumed-code', 'consumed');
+
+    const callbackSpy = vi.fn();
+    (globalThis as any).fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/auth/oauth/callback')) {
+        callbackSpy();
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/auth/callback?code=already-consumed-code&state=consumed-state']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <OAuthCallbackPage />
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Single Sign-On Failed/i)).toBeDefined();
+      expect(screen.getByText(/Google sign-in expired or was already used\. Please try again\./i)).toBeDefined();
+    });
+
+    // Exchange endpoint should NOT be called at all
+    expect(callbackSpy).not.toHaveBeenCalled();
+  });
+
+  it('renders OrgHierarchyPage Add User modal with explicit Password and Confirm Password fields without prepopulated demo password', async () => {
+    const directorUser = {
+      id: 1,
+      email: 'sarah.jenkins@syncbrief.ai',
+      full_name: 'Sarah Jenkins',
+      role: 'director' as const,
+      title: 'Director of Engineering',
+      role_level: 1,
+      tenant_id: 1,
+      tenant_name: 'SyncBrief Enterprise',
+    };
+    mockLocalStorage.setItem('syncbrief_token', 'valid-token');
+    mockLocalStorage.setItem('syncbrief_user', JSON.stringify(directorUser));
+
+    (globalThis as any).fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/auth/me')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(directorUser) });
+      }
+      if (url.includes('/api/auth/hierarchy')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      if (url.includes('/api/auth/users')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([directorUser]) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ThemeProvider>
+            <AuthProvider>
+              <ToastProvider>
+                <OrgHierarchyPage />
+              </ToastProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Organization Hierarchy & Directory/i)).toBeDefined();
+    });
+
+    const addBtn = screen.getByRole('button', { name: /Add User to Org/i });
+    fireEvent.click(addBtn);
+
+    expect(screen.getByPlaceholderText(/Min 6 characters/i)).toBeDefined();
+    expect(screen.getByPlaceholderText(/Repeat password/i)).toBeDefined();
+
+    // Verify demo1234 is not prepopulated in production UI
+    const passInput = screen.getByPlaceholderText(/Min 6 characters/i) as HTMLInputElement;
+    expect(passInput.value).toBe('');
+    const confirmInput = screen.getByPlaceholderText(/Repeat password/i) as HTMLInputElement;
+    expect(confirmInput.value).toBe('');
   });
 });
 

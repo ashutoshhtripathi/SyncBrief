@@ -8,8 +8,28 @@ import httpx
 import secrets
 import hashlib
 import base64
+import logging
+import asyncio
+import time
 from backend.app.database import get_db
-from backend.app.models import User, Checkin, Task, Tenant
+
+logger = logging.getLogger(__name__)
+
+# Single-use authorization code tracking & concurrency guard to prevent code reuse and replay attacks
+_exchanged_oauth_codes: Dict[str, float] = {}
+_oauth_exchange_lock = asyncio.Lock()
+
+def clear_oauth_code_cache():
+    """Helper to reset consumed authorization codes (used for test isolation)."""
+    _exchanged_oauth_codes.clear()
+
+def _cleanup_old_oauth_codes():
+    """Remove authorization codes older than 15 minutes."""
+    cutoff = time.time() - 900
+    expired = [c for c, ts in _exchanged_oauth_codes.items() if ts < cutoff]
+    for c in expired:
+        _exchanged_oauth_codes.pop(c, None)
+from backend.app.models import User, Checkin, Task, Tenant, OrganizationInvitation
 from backend.app.config import settings
 from backend.app.audit import log_audit_event
 from backend.app.schemas import (
@@ -22,9 +42,13 @@ from backend.app.schemas import (
     RefreshTokenRequest,
     TenantResponse,
     OAuthCallbackRequest,
+    OAuthPendingResponse,
+    OAuthPasswordVerifyRequest,
     OAuthConfigResponse,
     OAuthProviderConfig,
-    OAuthStartResponse
+    OAuthStartResponse,
+    InvitationCreate,
+    InvitationResponse
 )
 
 def generate_pkce_pair() -> Tuple[str, str]:
@@ -32,7 +56,15 @@ def generate_pkce_pair() -> Tuple[str, str]:
     digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
     code_challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
     return code_verifier, code_challenge
-from backend.app.auth_utils import verify_password, create_access_token, create_refresh_token, decode_access_token, hash_password
+from backend.app.auth_utils import (
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    decode_access_token,
+    hash_password,
+    create_pending_oauth_token,
+    decode_pending_oauth_token,
+)
 from backend.app.auth_deps import get_current_user
 from backend.app.hierarchy import (
     can_view_user, 
@@ -211,7 +243,7 @@ def login_oauth_redirect(provider: str, redirect_uri: Optional[str] = None):
     start_info = start_oauth(provider, redirect_uri=redirect_uri)
     return RedirectResponse(url=start_info["authorization_url"], status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
-@router.post("/oauth/callback", response_model=TokenResponse)
+@router.post("/oauth/callback", response_model=OAuthPendingResponse)
 async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db)):
     """
     Handles server-to-server OAuth code exchange and identity verification.
@@ -224,6 +256,26 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unsupported OAuth provider. Must be google or microsoft."
         )
+
+    # Replay protection: check if authorization code was already submitted or exchanged
+    _cleanup_old_oauth_codes()
+    async with _oauth_exchange_lock:
+        if req.code in _exchanged_oauth_codes:
+            logger.warning(
+                "OAuth authorization code reuse attempt blocked",
+                extra={
+                    "provider": provider,
+                    "redirect_uri": req.redirect_uri,
+                    "has_code": bool(req.code),
+                    "has_state": bool(req.state),
+                }
+            )
+            provider_title = "Google" if provider == "google" else "Microsoft"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{provider_title} sign-in expired or was already used. Please try again."
+            )
+        _exchanged_oauth_codes[req.code] = time.time()
 
     verified_email: Optional[str] = None
     verified_name: Optional[str] = None
@@ -247,19 +299,65 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
             "grant_type": "authorization_code"
         }
 
+        # Safe diagnostic logging (no secrets, codes, tokens, or passwords logged)
+        logger.info(
+            "Initiating OAuth token exchange",
+            extra={
+                "provider": provider,
+                "redirect_uri": eff_redirect,
+                "has_code": bool(req.code),
+                "has_state": bool(req.state),
+            }
+        )
+
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 token_resp = await client.post(token_url, data=token_payload)
             except Exception as e:
+                logger.error(
+                    "OAuth token exchange request failed",
+                    extra={
+                        "provider": provider,
+                        "redirect_uri": eff_redirect,
+                        "has_code": bool(req.code),
+                        "has_state": bool(req.state),
+                        "error": str(e)
+                    }
+                )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail=f"Failed to communicate with Google authentication services: {str(e)}"
                 )
 
+            google_error_code = None
             if token_resp.status_code != 200:
+                try:
+                    err_json = token_resp.json()
+                    google_error_code = err_json.get("error")
+                except Exception:
+                    google_error_code = "unknown"
+
+            logger.info(
+                "OAuth token exchange response received",
+                extra={
+                    "provider": provider,
+                    "redirect_uri": eff_redirect,
+                    "has_code": bool(req.code),
+                    "has_state": bool(req.state),
+                    "status_code": token_resp.status_code,
+                    "error_code": google_error_code
+                }
+            )
+
+            if token_resp.status_code != 200:
+                if google_error_code == "invalid_grant":
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Google sign-in expired or was already used. Please try again."
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Google authorization code exchange failed: {token_resp.text}"
+                    detail=f"Google authorization code exchange failed: {google_error_code or token_resp.status_code}"
                 )
 
             tokens = token_resp.json()
@@ -319,19 +417,64 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
         if req.code_verifier:
             token_payload["code_verifier"] = req.code_verifier
 
+        logger.info(
+            "Initiating OAuth token exchange",
+            extra={
+                "provider": provider,
+                "redirect_uri": eff_redirect,
+                "has_code": bool(req.code),
+                "has_state": bool(req.state),
+            }
+        )
+
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 token_resp = await client.post(token_url, data=token_payload)
             except Exception as e:
+                logger.error(
+                    "OAuth token exchange request failed",
+                    extra={
+                        "provider": provider,
+                        "redirect_uri": eff_redirect,
+                        "has_code": bool(req.code),
+                        "has_state": bool(req.state),
+                        "error": str(e)
+                    }
+                )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail=f"Failed to communicate with Microsoft authentication services: {str(e)}"
                 )
 
+            ms_error_code = None
             if token_resp.status_code != 200:
+                try:
+                    err_json = token_resp.json()
+                    ms_error_code = err_json.get("error")
+                except Exception:
+                    ms_error_code = "unknown"
+
+            logger.info(
+                "OAuth token exchange response received",
+                extra={
+                    "provider": provider,
+                    "redirect_uri": eff_redirect,
+                    "has_code": bool(req.code),
+                    "has_state": bool(req.state),
+                    "status_code": token_resp.status_code,
+                    "error_code": ms_error_code
+                }
+            )
+
+            if token_resp.status_code != 200:
+                if ms_error_code == "invalid_grant":
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Microsoft sign-in expired or was already used. Please try again."
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Microsoft authorization code exchange failed: {token_resp.text}"
+                    detail=f"Microsoft authorization code exchange failed: {ms_error_code or token_resp.status_code}"
                 )
 
             tokens = token_resp.json()
@@ -380,68 +523,153 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
     if verified_email == "sara.jenkins@syncbrief.ai":
         verified_email = "sarah.jenkins@syncbrief.ai"
 
-    # --- User Matching, Account Linking & Controlled Onboarding ---
+    # --- User Matching, Account Linking & Invite-Only Onboarding ---
     user = db.query(User).filter(User.email == verified_email, User.deleted_at.is_(None)).first()
 
     if user:
-        # Existing account: PRESERVE role, role_level, tenant_id, and hierarchy strictly
+        # Existing account: PRESERVE user_id, tenant_id, role, role_level, reports_to_id, permissions strictly
         user.auth_provider = provider
         if provider_user_id:
             user.auth_provider_id = str(provider_user_id)
         if not user.avatar_url and verified_avatar:
             user.avatar_url = verified_avatar
-        db.commit()
 
         log_audit_event(
             db=db,
-            action="OAUTH_LOGIN",
+            action="OAUTH_IDENTITY_VERIFIED",
             entity_type="User",
             entity_id=user.id,
             actor_id=user.id,
             actor_name=user.full_name,
-            input_summary=f"OAuth login via {provider} for existing user ({user.role}, L{user.role_level})",
+            input_summary=f"OAuth identity verified via {provider} for existing user ({user.role}, L{user.role_level})",
             tenant_id=user.tenant_id
         )
+        db.commit()
     else:
-        # Controlled onboarding for new users:
-        # Strictly assign base employee role (level 3). NEVER assign Director (L1) or Manager (L2).
-        email_domain = verified_email.split("@")[-1] if "@" in verified_email else ""
-        tenant = db.query(Tenant).filter(Tenant.domain == email_domain).first()
-        assigned_tenant_id = tenant.id if tenant else 1
+        # Check if user has an explicit pending invitation from the organization
+        invitation = db.query(OrganizationInvitation).filter(
+            OrganizationInvitation.email == verified_email,
+            OrganizationInvitation.status == "pending"
+        ).first()
 
-        random_password = secrets.token_urlsafe(32)
+        if invitation:
+            # Complete onboarding strictly using organization-assigned tenant and role
+            user = User(
+                email=verified_email,
+                hashed_password=hash_password("demo1234"),
+                full_name=invitation.full_name or verified_name or "Team Member",
+                role=invitation.role,
+                role_level=invitation.role_level,
+                title=invitation.title,
+                avatar_url=verified_avatar,
+                tenant_id=invitation.tenant_id,
+                reports_to_id=invitation.reports_to_id,
+                org_type=invitation.org_type,
+                auth_provider=provider,
+                auth_provider_id=str(provider_user_id) if provider_user_id else None,
+                streak_count=0
+            )
+            db.add(user)
+            invitation.status = "accepted"
+            invitation.accepted_at = datetime.utcnow()
+            db.flush()
 
-        user = User(
-            email=verified_email,
-            hashed_password=hash_password(random_password),
-            full_name=verified_name or "Team Member",
-            role="member",
-            role_level=3,
-            title="Software Engineer",
-            avatar_url=verified_avatar,
-            tenant_id=assigned_tenant_id,
-            reports_to_id=None,
-            org_type="engineering",
-            auth_provider=provider,
-            auth_provider_id=str(provider_user_id) if provider_user_id else None,
-            streak_count=0
+            log_audit_event(
+                db=db,
+                action="OAUTH_INVITE_ONBOARDING",
+                entity_type="User",
+                entity_id=user.id,
+                actor_id=user.id,
+                actor_name=user.full_name,
+                input_summary=f"Invited user registered via {provider} OAuth into tenant {user.tenant_id} as {user.role} (L{user.role_level})",
+                tenant_id=user.tenant_id
+            )
+            db.commit()
+            db.refresh(user)
+        else:
+            # Strictly reject uninvited accounts
+            log_audit_event(
+                db=db,
+                action="OAUTH_LOGIN_DENIED_UNINVITED",
+                entity_type="User",
+                entity_id=None,
+                actor_id=None,
+                actor_name=verified_name or verified_email,
+                input_summary=f"Uninvited OAuth attempt via {provider} for email {verified_email} was rejected",
+                tenant_id=1
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You haven't been invited to SyncBrief. Please contact your organization administrator."
+            )
+
+    # Issue short-lived pending OAuth token (valid for 10 minutes)
+    # Stamped with SERVER_BOOT_ID and strictly requiring SyncBrief password verification
+    pending_token = create_pending_oauth_token({
+        "sub": str(user.id),
+        "email": user.email,
+        "provider": provider,
+        "provider_user_id": str(provider_user_id) if provider_user_id else None,
+        "verified_avatar": verified_avatar,
+        "verified_name": verified_name
+    })
+
+    return {
+        "requires_password_verification": True,
+        "pending_token": pending_token,
+        "email": user.email,
+        "provider": provider,
+        "user_name": user.full_name
+    }
+
+@router.post("/oauth/verify-password", response_model=TokenResponse)
+def verify_oauth_password(req: OAuthPasswordVerifyRequest, db: Session = Depends(get_db)):
+    """
+    Verify the user's SyncBrief password following successful Google/Microsoft OAuth authentication.
+    Only upon valid server-side password verification is an authenticated application session (JWT) issued.
+    """
+    payload = decode_pending_oauth_token(req.pending_token)
+    if not payload or payload.get("token_type") != "pending_oauth":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired OAuth verification session. Please sign in again."
         )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
 
+    user_id = int(payload.get("sub"))
+    email = payload.get("email")
+    provider = payload.get("provider", "oauth")
+
+    user = db.query(User).filter(User.id == user_id, User.email == email, User.deleted_at.is_(None)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not found.")
+
+    # Server-side verification using existing password hashing/verification implementation
+    if not verify_password(req.password, user.hashed_password):
         log_audit_event(
             db=db,
-            action="OAUTH_ONBOARDING",
+            action="OAUTH_PASSWORD_VERIFICATION_FAILED",
             entity_type="User",
             entity_id=user.id,
             actor_id=user.id,
             actor_name=user.full_name,
-            input_summary=f"New user registered via {provider} OAuth as base Employee (L3)",
+            input_summary=f"Failed password verification for {provider} OAuth login ({user.email})",
             tenant_id=user.tenant_id
         )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect SyncBrief password."
+        )
 
-    # Issue standard SyncBrief tokens stamped with current SERVER_BOOT_ID
+    # Successful password verification: finalize account linking
+    user.auth_provider = provider
+    if payload.get("provider_user_id"):
+        user.auth_provider_id = str(payload["provider_user_id"])
+    if not user.avatar_url and payload.get("verified_avatar"):
+        user.avatar_url = payload["verified_avatar"]
+
+    # Issue standard authenticated SyncBrief application tokens stamped with SERVER_BOOT_ID
     access_token = create_access_token({
         "sub": str(user.id),
         "email": user.email,
@@ -453,6 +681,17 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
         "tenant_id": user.tenant_id or 1
     })
     user.refresh_token = refresh_token
+
+    log_audit_event(
+        db=db,
+        action="OAUTH_LOGIN_SUCCESS",
+        entity_type="User",
+        entity_id=user.id,
+        actor_id=user.id,
+        actor_name=user.full_name,
+        input_summary=f"Successful OAuth login via {provider} with verified SyncBrief password",
+        tenant_id=user.tenant_id
+    )
     db.commit()
 
     return {
@@ -461,6 +700,7 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
         "token_type": "bearer",
         "user": user_to_profile(user)
     }
+
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
@@ -692,6 +932,18 @@ def create_user(
     reports_to = req.reports_to_id if req.reports_to_id is not None else current_user.id
     enforce_can_assign_reports_to(current_user, reports_to, db)
 
+    # Validate password confirmation
+    if req.confirm_password is not None and req.password != req.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match. Password and Confirm Password must be identical."
+        )
+    if not req.password or len(req.password.strip()) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long."
+        )
+
     new_user = User(
         email=req.email.lower().strip(),
         hashed_password=hash_password(req.password),
@@ -844,3 +1096,135 @@ def delete_user(
 
     db.commit()
     return {"status": "success", "message": f"User {user.full_name} deactivated successfully (soft delete)"}
+
+# --- Organization Invitations Management ---
+@router.post("/invitations", response_model=InvitationResponse)
+def create_invitation(
+    req: InvitationCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Invite a new team member to the organization's tenant.
+    Restricted to Directors (L1) and Managers (L2).
+    Enforces role assignment and hierarchy reporting constraints.
+    """
+    is_director = current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1)
+    is_manager = current_user.role == "manager" or (current_user.role_level is not None and current_user.role_level == 2)
+
+    if not is_director and not is_manager:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Managers or Directors can invite new users")
+
+    # Enforce privilege escalation checks on role and role_level
+    enforce_can_assign_role(current_user, req.role, req.role_level)
+
+    email_clean = req.email.lower().strip()
+    
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == email_clean, User.deleted_at.is_(None)).first()
+    if existing_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User with this email already exists")
+
+    # Check if pending invitation already exists in this tenant
+    existing_invite = db.query(OrganizationInvitation).filter(
+        OrganizationInvitation.email == email_clean,
+        OrganizationInvitation.tenant_id == current_user.tenant_id,
+        OrganizationInvitation.status == "pending"
+    ).first()
+    if existing_invite:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A pending invitation already exists for this email")
+
+    # Validate reports_to_id
+    reports_to = req.reports_to_id if req.reports_to_id is not None else current_user.id
+    enforce_can_assign_reports_to(current_user, reports_to, db)
+
+    invitation = OrganizationInvitation(
+        tenant_id=current_user.tenant_id,
+        email=email_clean,
+        full_name=req.full_name,
+        role=req.role,
+        role_level=req.role_level,
+        title=req.title,
+        reports_to_id=reports_to,
+        org_type=req.org_type,
+        invited_by_id=current_user.id,
+        status="pending"
+    )
+    db.add(invitation)
+    db.commit()
+    db.refresh(invitation)
+
+    log_audit_event(
+        db=db,
+        action="CREATE_INVITATION",
+        entity_type="OrganizationInvitation",
+        entity_id=invitation.id,
+        actor_id=current_user.id,
+        actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
+        new_values={"email": invitation.email, "role": invitation.role, "role_level": invitation.role_level}
+    )
+
+    return invitation
+
+@router.get("/invitations", response_model=List[InvitationResponse])
+def list_invitations(
+    status_filter: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    List invitations for the caller's tenant.
+    Restricted to Directors (L1) and Managers (L2).
+    """
+    is_director = current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1)
+    is_manager = current_user.role == "manager" or (current_user.role_level is not None and current_user.role_level == 2)
+
+    if not is_director and not is_manager:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Managers or Directors can view invitations")
+
+    query = db.query(OrganizationInvitation).filter(
+        OrganizationInvitation.tenant_id == current_user.tenant_id
+    )
+    if status_filter:
+        query = query.filter(OrganizationInvitation.status == status_filter)
+    
+    return query.order_by(OrganizationInvitation.created_at.desc()).all()
+
+@router.delete("/invitations/{invitation_id}")
+def revoke_invitation(
+    invitation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Revoke a pending invitation.
+    Restricted to Directors (L1) and Managers (L2).
+    """
+    is_director = current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1)
+    is_manager = current_user.role == "manager" or (current_user.role_level is not None and current_user.role_level == 2)
+
+    if not is_director and not is_manager:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Managers or Directors can revoke invitations")
+
+    invitation = db.query(OrganizationInvitation).filter(
+        OrganizationInvitation.id == invitation_id,
+        OrganizationInvitation.tenant_id == current_user.tenant_id
+    ).first()
+    if not invitation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+
+    invitation.status = "revoked"
+    db.commit()
+
+    log_audit_event(
+        db=db,
+        action="REVOKE_INVITATION",
+        entity_type="OrganizationInvitation",
+        entity_id=invitation.id,
+        actor_id=current_user.id,
+        actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id
+    )
+
+    return {"status": "success", "message": "Invitation revoked successfully"}

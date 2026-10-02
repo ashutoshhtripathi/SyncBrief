@@ -102,7 +102,40 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
         # Invalidate tokens issued prior to the current application/server run
         if payload.get("boot_id") != SERVER_BOOT_ID:
             return None
+        # Pending OAuth tokens cannot be used as authenticated application session tokens
+        if payload.get("token_type") == "pending_oauth":
+            return None
         return payload
     except Exception:
         return None
+
+def create_pending_oauth_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create signed short-lived (10 minutes) JWT token representing verified OAuth provider
+    identity pending SyncBrief password verification.
+    """
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=10))
+    to_encode.update({
+        "exp": expire,
+        "token_type": "pending_oauth",
+        "boot_id": SERVER_BOOT_ID
+    })
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+def decode_pending_oauth_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Decode and validate a pending OAuth verification token against current server boot ID.
+    Strictly rejects access tokens, refresh tokens, and expired/tampered tokens.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("boot_id") != SERVER_BOOT_ID:
+            return None
+        if payload.get("token_type") != "pending_oauth":
+            return None
+        return payload
+    except Exception:
+        return None
+
 

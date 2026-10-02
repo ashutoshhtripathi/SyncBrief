@@ -100,10 +100,11 @@ export const OrgHierarchyPage: React.FC = () => {
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
-    password: 'demo1234',
+    password: '',
+    confirm_password: '',
     role: 'member',
     title: 'Software Engineer',
-    role_level: 4,
+    role_level: 3,
     reports_to_id: null as number | null,
     org_type: 'engineering'
   });
@@ -130,6 +131,14 @@ export const OrgHierarchyPage: React.FC = () => {
   // Create User
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.password || formData.password.length < 6) {
+      toast.error("Password must be at least 6 characters long.");
+      return;
+    }
+    if (formData.password !== formData.confirm_password) {
+      toast.error("Passwords do not match. Please verify Password and Confirm Password.");
+      return;
+    }
     try {
       await createUser({
         ...formData,
@@ -140,7 +149,8 @@ export const OrgHierarchyPage: React.FC = () => {
       setFormData({
         full_name: '',
         email: '',
-        password: 'demo1234',
+        password: '',
+        confirm_password: '',
         role: 'member',
         title: 'Software Engineer',
         role_level: 3,
@@ -296,7 +306,8 @@ export const OrgHierarchyPage: React.FC = () => {
               setFormData({
                 full_name: '',
                 email: '',
-                password: 'demo1234',
+                password: '',
+                confirm_password: '',
                 role: 'employee',
                 title: 'Software Engineer',
                 role_level: 3,
@@ -452,6 +463,33 @@ export const OrgHierarchyPage: React.FC = () => {
                     required
                     value={formData.email}
                     onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Password *</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    placeholder="Min 6 characters"
+                    value={formData.password}
+                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Confirm Password *</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    placeholder="Repeat password"
+                    value={formData.confirm_password}
+                    onChange={(e) => setFormData(prev => ({ ...prev, confirm_password: e.target.value }))}
                     className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-hidden"
                   />
                 </div>

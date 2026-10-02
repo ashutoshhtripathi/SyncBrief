@@ -47,6 +47,27 @@ class User(Base):
     checkins = relationship("Checkin", back_populates="user", cascade="all, delete-orphan")
     manager = relationship("User", remote_side=[id], backref="direct_reports")
 
+class OrganizationInvitation(Base):
+    __tablename__ = "organization_invitations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, default=1, index=True)
+    email = Column(String(255), index=True, nullable=False)
+    full_name = Column(String(255), nullable=True)
+    role = Column(String(50), default="member")
+    role_level = Column(Integer, default=3)
+    title = Column(String(255), default="Software Engineer")
+    reports_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    org_type = Column(String(50), default="engineering")
+    invited_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(50), default="pending")  # "pending", "accepted", "revoked"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    accepted_at = Column(DateTime, nullable=True)
+
+    tenant = relationship("Tenant")
+    invited_by = relationship("User", foreign_keys=[invited_by_id])
+    manager = relationship("User", foreign_keys=[reports_to_id])
+
 class Channel(Base):
     __tablename__ = "channels"
 

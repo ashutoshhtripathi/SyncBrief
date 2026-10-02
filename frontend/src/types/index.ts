@@ -407,4 +407,19 @@ export interface OAuthCallbackPayload {
   code: string;
   redirect_uri: string;
   code_verifier?: string;
+  state?: string;
 }
+
+export interface OAuthPendingResponse {
+  requires_password_verification: boolean;
+  pending_token: string;
+  email: string;
+  provider: string;
+  user_name?: string;
+}
+
+export interface OAuthPasswordVerifyPayload {
+  pending_token: string;
+  password: string;
+}
+
