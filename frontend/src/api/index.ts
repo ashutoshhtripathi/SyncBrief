@@ -13,7 +13,11 @@ import {
   PointsSummary,
   AppraisalReport,
   HierarchyNode,
-  JiraImportResult
+  JiraImportResult,
+  PerformanceCycle,
+  PerformanceGoal,
+  PerformanceSummaryEmployee,
+  PerformanceAppraisalEvidenceResponse
 } from '../types';
 
 const API_BASE = '/api';
@@ -528,5 +532,156 @@ export async function runDemoScenario(): Promise<any> {
     headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error('Failed to run demo scenario');
+  return res.json();
+}
+
+// ==========================================
+// Performance Points & Goals API
+// ==========================================
+
+export async function fetchPerformanceCycles(): Promise<PerformanceCycle[]> {
+  const res = await fetch(`${API_BASE}/performance/cycles`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch performance cycles');
+  return res.json();
+}
+
+export async function createPerformanceCycle(data: {
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_active?: boolean;
+}): Promise<PerformanceCycle> {
+  const res = await fetch(`${API_BASE}/performance/cycles`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to create cycle' }));
+    throw new Error(err.detail || 'Failed to create cycle');
+  }
+  return res.json();
+}
+
+export async function closePerformanceCycle(cycleId: number, autoCarryForward = true): Promise<any> {
+  const res = await fetch(`${API_BASE}/performance/cycles/${cycleId}/close`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ auto_carry_forward: autoCarryForward }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to close cycle' }));
+    throw new Error(err.detail || 'Failed to close cycle');
+  }
+  return res.json();
+}
+
+export async function fetchPerformanceGoals(cycleId?: number, employeeId?: number): Promise<PerformanceGoal[]> {
+  const params = new URLSearchParams();
+  if (cycleId) params.append('cycle_id', cycleId.toString());
+  if (employeeId) params.append('employee_id', employeeId.toString());
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_BASE}/performance/goals${qs}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch performance goals');
+  return res.json();
+}
+
+export async function createPerformanceGoal(data: {
+  cycle_id: number;
+  employee_id: number;
+  title: string;
+  description?: string;
+  category?: string;
+  assigned_points: number;
+  target_pct?: number;
+  task_id?: number | null;
+}): Promise<PerformanceGoal> {
+  const payload = {
+    cycle_id: data.cycle_id,
+    user_id: data.employee_id,
+    title: data.title,
+    description: data.description || '',
+    assigned_points: data.assigned_points,
+    target_percentage: data.target_pct || 100.0,
+    source_task_id: data.task_id || null
+  };
+  const res = await fetch(`${API_BASE}/performance/goals`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to create goal' }));
+    throw new Error(err.detail || 'Failed to create goal');
+  }
+  return res.json();
+}
+
+export async function updateGoalProgress(
+  goalId: number,
+  data: {
+    current_progress_pct?: number;
+    status?: string;
+    progress_note?: string;
+    sync_task?: boolean;
+  }
+): Promise<PerformanceGoal> {
+  const payload = {
+    current_progress_percentage: data.current_progress_pct !== undefined ? data.current_progress_pct : 0,
+    sync_with_task: data.sync_task || false
+  };
+  const res = await fetch(`${API_BASE}/performance/goals/${goalId}/progress`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to update goal progress' }));
+    throw new Error(err.detail || 'Failed to update goal progress');
+  }
+  return res.json();
+}
+
+export async function carryForwardGoal(goalId: number, targetCycleId: number): Promise<PerformanceGoal> {
+  const res = await fetch(`${API_BASE}/performance/goals/${goalId}/carry-forward`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ target_cycle_id: targetCycleId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to carry forward goal' }));
+    throw new Error(err.detail || 'Failed to carry forward goal');
+  }
+  return res.json();
+}
+
+export async function fetchMyPerformanceSummary(cycleId?: number): Promise<PerformanceSummaryEmployee> {
+  const qs = cycleId ? `?cycle_id=${cycleId}` : '';
+  const res = await fetch(`${API_BASE}/performance/my-summary${qs}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch personal performance summary');
+  return res.json();
+}
+
+export async function fetchEmployeePerformanceSummary(employeeId: number, cycleId?: number): Promise<PerformanceSummaryEmployee> {
+  const qs = cycleId ? `?cycle_id=${cycleId}` : '';
+  const res = await fetch(`${API_BASE}/performance/employee/${employeeId}/summary${qs}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch employee performance summary');
+  return res.json();
+}
+
+export async function fetchPerformanceAppraisalEvidence(cycleId?: number): Promise<PerformanceAppraisalEvidenceResponse> {
+  const qs = cycleId ? `?cycle_id=${cycleId}` : '';
+  const res = await fetch(`${API_BASE}/performance/appraisal-evidence${qs}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch performance appraisal evidence');
   return res.json();
 }

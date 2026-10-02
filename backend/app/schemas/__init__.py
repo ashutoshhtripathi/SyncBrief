@@ -380,3 +380,145 @@ class JiraImportResponse(BaseModel):
     sprint_id: Optional[int]
     tasks: List[TaskResponse] = []
     errors: List[str] = []
+
+# --- Performance Points & Goals Schemas ---
+class PerformanceCycleCreate(BaseModel):
+    name: str
+    start_date: datetime
+    end_date: datetime
+    status: str = "active" # "draft", "active", "closed"
+    description: Optional[str] = None
+
+class PerformanceCycleUpdate(BaseModel):
+    name: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: Optional[str] = None
+    description: Optional[str] = None
+
+class PerformanceCycleCloseRequest(BaseModel):
+    target_cycle_id: Optional[int] = None # Next cycle to carry forward incomplete goals to
+    auto_carry_forward: bool = True
+    goal_ids_to_carry: Optional[List[int]] = None # If specified, carries specific goals; otherwise carries all incomplete
+
+class PerformanceCycleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    start_date: datetime
+    end_date: datetime
+    status: str
+    description: Optional[str] = None
+    tenant_id: int
+    created_at: datetime
+    goals_count: int = 0
+    completed_goals_count: int = 0
+    is_active: Optional[bool] = None
+
+class PerformanceGoalCreate(BaseModel):
+    cycle_id: int
+    user_id: int # employee
+    title: str
+    description: Optional[str] = ""
+    assigned_points: float # must be > 0
+    target_percentage: float = 100.0
+    category: Optional[str] = "delivery"
+    deadline: Optional[datetime] = None
+    source_task_id: Optional[int] = None
+
+class PerformanceGoalUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigned_points: Optional[float] = None
+    target_percentage: Optional[float] = None
+    category: Optional[str] = None
+    deadline: Optional[datetime] = None
+    source_task_id: Optional[int] = None
+    status: Optional[str] = None
+
+class PerformanceGoalProgressUpdate(BaseModel):
+    current_progress_percentage: float # 0.0 to 100.0
+    sync_with_task: Optional[bool] = False
+
+class PerformanceGoalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    cycle_id: int
+    cycle_name: Optional[str] = None
+    user_id: int
+    employee_name: Optional[str] = None
+    employee_email: Optional[str] = None
+    created_by: int
+    manager_name: Optional[str] = None
+    title: str
+    description: str
+    assigned_points: float
+    target_percentage: float
+    current_progress_percentage: float
+    previously_earned_points: float
+    earned_points: float
+    remaining_points: float
+    status: str
+    category: Optional[str] = "delivery"
+    current_progress_pct: Optional[float] = None
+    target_pct: Optional[float] = None
+    task_id: Optional[int] = None
+    task_title: Optional[str] = None
+    deadline: Optional[datetime] = None
+    source_task_id: Optional[int] = None
+    source_task_title: Optional[str] = None
+    carried_from_goal_id: Optional[int] = None
+    tenant_id: int
+    created_at: datetime
+    updated_at: datetime
+
+class PerformanceSummaryEmployee(BaseModel):
+    user_id: int
+    full_name: str
+    title: str
+    role_level: int
+    manager_name: Optional[str] = None
+    cycle_name: str
+    total_assigned_points: float
+    total_previously_earned_points: float
+    total_cycle_earned_points: float
+    total_remaining_points: float
+    total_lifetime_earned_points: float
+    completion_rate_pct: float
+    goals_count: int
+    completed_goals_count: int
+    carried_forward_goals_count: int
+    total_earned_points: Optional[float] = None
+    total_goals_count: Optional[int] = None
+    in_progress_goals_count: Optional[int] = None
+    cycle_is_active: Optional[bool] = None
+    goals: List[PerformanceGoalResponse] = []
+
+class PerformanceAppraisalEvidenceItem(BaseModel):
+    user_id: int
+    full_name: str
+    role: str
+    title: str
+    avatar_url: Optional[str] = None
+    role_level: int
+    manager_name: Optional[str] = None
+    cycle_name: str
+    total_assigned_points: float
+    total_earned_points: float
+    total_remaining_points: float
+    completion_rate_pct: float
+    goals_count: int
+    completed_goals_count: int
+    carried_forward_goals_count: int
+    goals: List[PerformanceGoalResponse] = []
+
+class PerformanceAppraisalEvidenceResponse(BaseModel):
+    cycle_id: Optional[int] = None
+    cycle_name: str
+    manager_id: int
+    manager_name: str
+    evidence_note: str = "Performance points represent objective goal delivery evidence for human manager review; promotion and rating decisions are not automated."
+    employees: List[PerformanceAppraisalEvidenceItem] = []
+    items: Optional[List[PerformanceAppraisalEvidenceItem]] = []

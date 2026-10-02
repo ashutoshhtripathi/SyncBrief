@@ -277,3 +277,113 @@ export interface JiraImportResult {
   tasks: Task[];
   errors: string[];
 }
+
+// ==========================================
+// Performance Points & Goals Types
+// ==========================================
+
+export interface PerformanceCycle {
+  id: number;
+  tenant_id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  status: 'active' | 'closed';
+  description?: string | null;
+  created_at: string;
+  goals_count: number;
+  completed_goals_count: number;
+  is_active?: boolean; // helper mapped to status === 'active'
+}
+
+export interface PerformanceGoal {
+  id: number;
+  tenant_id: number;
+  cycle_id: number;
+  cycle_name?: string | null;
+  user_id: number;
+  employee_name?: string | null;
+  employee_email?: string | null;
+  created_by: number;
+  manager_name?: string | null;
+  title: string;
+  description?: string | null;
+  category?: string | null;
+  assigned_points: number;
+  target_percentage: number;
+  target_pct?: number;
+  current_progress_percentage: number;
+  current_progress_pct?: number;
+  previously_earned_points: number;
+  earned_points: number;
+  remaining_points: number;
+  status: string;
+  deadline?: string | null;
+  source_task_id?: number | null;
+  source_task_title?: string | null;
+  task_id?: number | null;
+  task_title?: string | null;
+  carried_from_goal_id?: number | null;
+  progress_note?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PerformanceSummaryEmployee {
+  user_id: number;
+  full_name: string;
+  title: string;
+  role_level: number;
+  manager_name?: string | null;
+  cycle_name: string;
+  cycle_is_active?: boolean;
+  total_assigned_points: number;
+  total_previously_earned_points: number;
+  total_cycle_earned_points: number;
+  total_earned_points?: number;
+  total_remaining_points: number;
+  total_lifetime_earned_points: number;
+  completion_rate_pct: number;
+  goals_count: number;
+  total_goals_count?: number;
+  completed_goals_count: number;
+  in_progress_goals_count?: number;
+  carried_forward_goals_count: number;
+  goals: PerformanceGoal[];
+}
+
+export interface PerformanceAppraisalEvidenceItem {
+  user_id: number;
+  full_name: string;
+  role: string;
+  title: string;
+  avatar_url?: string | null;
+  role_level: number;
+  manager_name?: string | null;
+  cycle_name: string;
+  total_assigned_points: number;
+  total_earned_points: number;
+  total_remaining_points: number;
+  completion_rate_pct: number;
+  achievement_rate_pct?: number;
+  goals_count: number;
+  goals_total?: number;
+  completed_goals_count: number;
+  goals_completed?: number;
+  carried_forward_goals_count: number;
+  carried_goals_count?: number;
+  employee_id?: number;
+  employee_name?: string;
+  employee_title?: string;
+  goals?: PerformanceGoal[];
+}
+
+export interface PerformanceAppraisalEvidenceResponse {
+  cycle_id?: number | null;
+  cycle_name: string;
+  manager_id: number;
+  manager_name: string;
+  evidence_note: string;
+  employees: PerformanceAppraisalEvidenceItem[];
+  items?: PerformanceAppraisalEvidenceItem[];
+}

@@ -15,6 +15,7 @@ from backend.app.api.demo import router as demo_router
 from backend.app.api.sprints import router as sprints_router
 from backend.app.api.tasks import router as tasks_router
 from backend.app.api.points import router as points_router
+from backend.app.api.performance import router as performance_router
 from backend.app.api.jira import router as jira_router
 from backend.app.api.audit import router as audit_router
 from backend.app.middleware import SecurityHeadersMiddleware, RateLimitMiddleware
@@ -57,6 +58,7 @@ app.include_router(demo_router, prefix=settings.API_V1_STR)
 app.include_router(sprints_router, prefix=settings.API_V1_STR)
 app.include_router(tasks_router, prefix=settings.API_V1_STR)
 app.include_router(points_router, prefix=settings.API_V1_STR)
+app.include_router(performance_router, prefix=settings.API_V1_STR)
 app.include_router(jira_router, prefix=settings.API_V1_STR)
 app.include_router(audit_router, prefix=settings.API_V1_STR)
 

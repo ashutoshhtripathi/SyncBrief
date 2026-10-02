@@ -25,6 +25,7 @@ import { MyPointsPage } from './pages/MyPointsPage';
 import { AppraisalPage } from './pages/AppraisalPage';
 import { WhySyncBriefPage } from './pages/WhySyncBriefPage';
 import { OrgHierarchyPage } from './pages/OrgHierarchyPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -149,7 +150,7 @@ const AppContent: React.FC = () => {
         <Route path="/" element={<LandingPage onOpenQuickAdd={() => setIsQuickAddOpen(true)} />} />
         <Route path="/checkin" element={<CheckinPage />} />
         <Route path="/sprints" element={<SprintBoardPage />} />
-        <Route path="/points" element={<MyPointsPage />} />
+        <Route path="/points" element={<ErrorBoundary fallbackTitle="Points & Goals Service"><MyPointsPage /></ErrorBoundary>} />
         <Route path="/appraisal" element={<AppraisalPage />} />
         <Route path="/why-syncbrief" element={<WhySyncBriefPage />} />
         <Route path="/hierarchy" element={<OrgHierarchyPage />} />

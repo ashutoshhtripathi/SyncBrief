@@ -241,3 +241,59 @@ class SystemSetting(Base):
 
     key = Column(String(100), primary_key=True)
     value_json = Column(Text, nullable=False)
+
+class PerformanceCycle(Base):
+    __tablename__ = "performance_cycles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, default=1, index=True)
+    name = Column(String(100), nullable=False)          # e.g., "2026-Q1", "2026-Q2"
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    status = Column(String(50), default="active")       # "draft", "active", "closed"
+    description = Column(Text, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    goals = relationship("PerformanceGoal", back_populates="cycle", cascade="all, delete-orphan")
+
+class PerformanceGoal(Base):
+    __tablename__ = "performance_goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, default=1, index=True)
+    cycle_id = Column(Integer, ForeignKey("performance_cycles.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)      # Employee
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)               # Manager/Director
+    
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    category = Column(String(50), default="delivery")
+    
+    # Points & Delivery
+    assigned_points = Column(Float, nullable=False)             # Total lifetime goal points (e.g. 10.0)
+    target_percentage = Column(Float, default=100.0)            # 100%
+    current_progress_percentage = Column(Float, default=0.0)    # Progress reached (e.g. 70.0%)
+    
+    # Non-duplicating points breakdown
+    previously_earned_points = Column(Float, default=0.0)       # Locked points from prior cycle (e.g. 7.0)
+    earned_points = Column(Float, default=0.0)                  # Earned strictly in this cycle (e.g. 3.0)
+    remaining_points = Column(Float, default=0.0)               # Remaining available to earn
+    
+    status = Column(String(50), default="in_progress")          # "in_progress", "completed", "carried_forward", "cancelled"
+    deadline = Column(DateTime, nullable=True)
+    
+    # Linkages
+    source_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
+    carried_from_goal_id = Column(Integer, ForeignKey("performance_goals.id"), nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    cycle = relationship("PerformanceCycle", back_populates="goals")
+    employee = relationship("User", foreign_keys=[user_id])
+    manager = relationship("User", foreign_keys=[created_by])
+    source_task = relationship("Task", foreign_keys=[source_task_id])
+    carried_from = relationship("PerformanceGoal", remote_side=[id], backref="carried_to_goals")

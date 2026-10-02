@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, 
   Network, 
@@ -33,11 +33,61 @@ export const OrgHierarchyPage: React.FC = () => {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const isManagerOrDirector =
-    user?.role === 'manager' ||
+  const isDirector =
     user?.role === 'director' ||
     user?.role === 'admin' ||
-    (user?.role_level !== undefined && user.role_level <= 2);
+    (user?.role_level !== undefined && user.role_level <= 1);
+
+  const isManager =
+    user?.role === 'manager' ||
+    (user?.role_level !== undefined && user.role_level === 2);
+
+  const isManagerOrDirector = isDirector || isManager;
+
+  // Subordinate IDs for current manager
+  const subordinateIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (!user) return ids;
+
+    const findAndCollect = (nodes: HierarchyNode[]): boolean => {
+      for (const node of nodes) {
+        if (node.id === user.id) {
+          const collect = (children: HierarchyNode[]) => {
+            for (const child of children) {
+              ids.add(child.id);
+              if (child.children) collect(child.children);
+            }
+          };
+          if (node.children) collect(node.children);
+          return true;
+        }
+        if (node.children && findAndCollect(node.children)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    findAndCollect(hierarchy);
+    return ids;
+  }, [hierarchy, user]);
+
+  // Authority check: Can the logged-in user edit or delete the target user?
+  const canManageTarget = (target: { id: number; role_level?: number; role?: string }) => {
+    if (!user || user.id === target.id) return false;
+    if (isDirector) return true;
+    if (isManager) {
+      const targetLevel = target.role_level ?? 5;
+      const targetIsUpperOrPeer =
+        target.role === 'admin' ||
+        target.role === 'director' ||
+        target.role === 'manager' ||
+        targetLevel <= 2;
+      if (targetIsUpperOrPeer) return false;
+      return subordinateIds.has(target.id);
+    }
+    return false;
+  };
 
   // User CRUD Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -195,8 +245,8 @@ export const OrgHierarchyPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Actions (Manager / Director only) */}
-          {isManagerOrDirector && (
+          {/* Quick Actions (Authorized Manager / Director only) */}
+          {canManageTarget(node) && (
             <div className="flex items-center gap-2 pt-2 sm:pt-0">
               <button
                 onClick={() => {
@@ -339,21 +389,27 @@ export const OrgHierarchyPage: React.FC = () => {
                   </td>
                   {isManagerOrDirector && (
                     <td className="py-3 px-4 text-right space-x-1">
-                      <button
-                        onClick={() => openEditModal(u)}
-                        className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold transition"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => {
-                          setUserToDelete(u);
-                          setIsDeleteModalOpen(true);
-                        }}
-                        className="px-2.5 py-1 rounded bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 font-semibold transition"
-                      >
-                        Delete
-                      </button>
+                      {canManageTarget(u) ? (
+                        <>
+                          <button
+                            onClick={() => openEditModal(u)}
+                            className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold transition"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => {
+                              setUserToDelete(u);
+                              setIsDeleteModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 font-semibold transition"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500 italic px-2 py-1">Protected</span>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -422,8 +478,8 @@ export const OrgHierarchyPage: React.FC = () => {
                     }))}
                     className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-hidden"
                   >
-                    <option value={1}>L1 (Director)</option>
-                    <option value={2}>L2 (Manager)</option>
+                    {isDirector && <option value={1}>L1 (Director)</option>}
+                    {isDirector && <option value={2}>L2 (Manager)</option>}
                     <option value={3}>L3 (Employee)</option>
                   </select>
                 </div>
@@ -438,11 +494,13 @@ export const OrgHierarchyPage: React.FC = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, reports_to_id: e.target.value ? Number(e.target.value) : null }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-hidden"
                 >
-                  <option value="">Top Level (No Manager / Self-governing)</option>
-                  {allUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name} ({u.title} - L{u.role_level})
-                    </option>
+                  {isDirector && <option value="">Top Level (No Manager / Self-governing)</option>}
+                  {allUsers
+                    .filter(u => isDirector || u.id === user?.id || subordinateIds.has(u.id))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({u.title} - L{u.role_level})
+                      </option>
                   ))}
                 </select>
               </div>
@@ -516,8 +574,8 @@ export const OrgHierarchyPage: React.FC = () => {
                     }))}
                     className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-hidden"
                   >
-                    <option value={1}>L1 (Director)</option>
-                    <option value={2}>L2 (Manager)</option>
+                    {isDirector && <option value={1}>L1 (Director)</option>}
+                    {isDirector && <option value={2}>L2 (Manager)</option>}
                     <option value={3}>L3 (Employee)</option>
                   </select>
                 </div>
@@ -529,8 +587,8 @@ export const OrgHierarchyPage: React.FC = () => {
                     onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
                     className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-hidden"
                   >
-                    <option value="director">Director</option>
-                    <option value="manager">Manager</option>
+                    {isDirector && <option value="director">Director</option>}
+                    {isDirector && <option value="manager">Manager</option>}
                     <option value="employee">Employee</option>
                   </select>
                 </div>
@@ -545,11 +603,13 @@ export const OrgHierarchyPage: React.FC = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, reports_to_id: e.target.value ? Number(e.target.value) : null }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-hidden"
                 >
-                  <option value="">Top Level (No Manager)</option>
-                  {allUsers.filter(x => x.id !== selectedUserForEdit.id).map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name} ({u.title} - L{u.role_level})
-                    </option>
+                  {isDirector && <option value="">Top Level (No Manager)</option>}
+                  {allUsers
+                    .filter(x => x.id !== selectedUserForEdit.id && (isDirector || x.id === user?.id || subordinateIds.has(x.id)))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({u.title} - L{u.role_level})
+                      </option>
                   ))}
                 </select>
               </div>

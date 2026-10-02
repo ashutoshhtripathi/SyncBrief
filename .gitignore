@@ -35,3 +35,4 @@ Thumbs.db
 
 # Local scratch and database snapshots
 backups/
+backend/syncbrief.db

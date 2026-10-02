@@ -16,7 +16,15 @@ from backend.app.schemas import (
 )
 from backend.app.auth_utils import verify_password, create_access_token, create_refresh_token, decode_access_token, hash_password
 from backend.app.auth_deps import get_current_user
-from backend.app.hierarchy import can_view_user, enforce_hierarchy_access, get_subordinate_ids
+from backend.app.hierarchy import (
+    can_view_user, 
+    enforce_hierarchy_access, 
+    get_subordinate_ids,
+    enforce_can_manage_user,
+    enforce_can_assign_role,
+    enforce_can_assign_reports_to,
+    enforce_tenant_access
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Hierarchy"])
 
@@ -296,22 +304,22 @@ def create_user(
     """Top-level / manager user creating a new team member."""
     from backend.app.audit import log_audit_event
 
-    if current_user.role not in ["admin", "manager", "director"] and current_user.role_level > 2:
+    is_director = current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1)
+    is_manager = current_user.role == "manager" or (current_user.role_level is not None and current_user.role_level == 2)
+
+    if not is_director and not is_manager:
         raise HTTPException(status_code=403, detail="Only Managers or Directors can create new users")
+
+    # Enforce role assignment rules (e.g., Managers cannot create L1/L2 privileged users)
+    enforce_can_assign_role(current_user, req.role, req.role_level)
 
     existing = db.query(User).filter(User.email == req.email.lower().strip(), User.deleted_at.is_(None)).first()
     if existing:
         raise HTTPException(status_code=400, detail="User with this email already exists")
 
-    reports_to = req.reports_to_id or current_user.id
-    if reports_to:
-        mgr = db.query(User).filter(
-            User.id == reports_to,
-            User.tenant_id == current_user.tenant_id,
-            User.deleted_at.is_(None)
-        ).first()
-        if not mgr:
-            raise HTTPException(status_code=400, detail="Reporting manager not found in current organization")
+    # Determine reporting relationship and validate
+    reports_to = req.reports_to_id if req.reports_to_id is not None else current_user.id
+    enforce_can_assign_reports_to(current_user, reports_to, db)
 
     new_user = User(
         email=req.email.lower().strip(),
@@ -355,16 +363,42 @@ def update_user(
 ):
     from backend.app.audit import log_audit_event
 
-    if current_user.role not in ["admin", "manager", "director"] and current_user.role_level > 2 and current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Permission denied to edit user")
-
     user = db.query(User).filter(
         User.id == user_id,
-        User.tenant_id == current_user.tenant_id,
         User.deleted_at.is_(None)
     ).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Enforce strict tenant isolation
+    enforce_tenant_access(current_user, user.tenant_id)
+
+    is_director = current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1)
+
+    if current_user.id == user_id:
+        # Self profile update: non-directors cannot escalate or alter organizational roles/hierarchy
+        if not is_director:
+            if req.role is not None and req.role.lower() != user.role.lower():
+                raise HTTPException(status_code=403, detail="Forbidden: You cannot modify your own organizational role.")
+            if req.role_level is not None and req.role_level != user.role_level:
+                raise HTTPException(status_code=403, detail="Forbidden: You cannot modify your own role level.")
+            if "reports_to_id" in req.model_fields_set and req.reports_to_id != user.reports_to_id:
+                raise HTTPException(status_code=403, detail="Forbidden: You cannot modify your own reporting manager.")
+            if req.org_type is not None and req.org_type != user.org_type:
+                raise HTTPException(status_code=403, detail="Forbidden: You cannot modify your own organization department.")
+    else:
+        # Managing another user: enforce hierarchy management authority
+        enforce_can_manage_user(current_user, user, db)
+
+        # Enforce privilege escalation checks on role and role_level
+        if req.role is not None or req.role_level is not None:
+            enforce_can_assign_role(current_user, req.role, req.role_level)
+
+        # Enforce reporting hierarchy assignment checks
+        if "reports_to_id" in req.model_fields_set:
+            if req.reports_to_id is not None and req.reports_to_id == user.id:
+                raise HTTPException(status_code=400, detail="User cannot report to themselves")
+            enforce_can_assign_reports_to(current_user, req.reports_to_id, db)
 
     old_vals = {"full_name": user.full_name, "role": user.role, "role_level": user.role_level, "reports_to_id": user.reports_to_id}
 
@@ -375,16 +409,7 @@ def update_user(
     if req.timezone is not None: user.timezone = req.timezone
     if req.reminder_time is not None: user.reminder_time = req.reminder_time
     if req.role_level is not None: user.role_level = req.role_level
-    if req.reports_to_id is not None:
-        if req.reports_to_id == user.id:
-            raise HTTPException(status_code=400, detail="User cannot report to themselves")
-        mgr = db.query(User).filter(
-            User.id == req.reports_to_id,
-            User.tenant_id == current_user.tenant_id,
-            User.deleted_at.is_(None)
-        ).first()
-        if not mgr:
-            raise HTTPException(status_code=400, detail="Reporting manager not found in current organization")
+    if "reports_to_id" in req.model_fields_set:
         user.reports_to_id = req.reports_to_id
     if req.org_type is not None: user.org_type = req.org_type
 
@@ -413,19 +438,19 @@ def delete_user(
     """Soft delete user (Admin/Director/Manager only, confirmation required)."""
     from backend.app.audit import log_audit_event
 
-    if current_user.role not in ["admin", "manager", "director"] and current_user.role_level > 2:
-        raise HTTPException(status_code=403, detail="Only Directors/Managers can delete users")
-
     if current_user.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
     user = db.query(User).filter(
         User.id == user_id,
-        User.tenant_id == current_user.tenant_id,
         User.deleted_at.is_(None)
     ).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Enforce tenant isolation & management authority
+    enforce_tenant_access(current_user, user.tenant_id)
+    enforce_can_manage_user(current_user, user, db)
 
     # Reassign direct reports within the tenant to the deleted user's manager
     db.query(User).filter(

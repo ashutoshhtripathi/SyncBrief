@@ -3,7 +3,10 @@ import json
 import logging
 from backend.app.auth_utils import hash_password
 from backend.app.database import SessionLocal, Base, engine
-from backend.app.models import Tenant, User, Channel, Message, Checkin, Blocker, Digest, AuditLog, SystemSetting, Sprint, Task
+from backend.app.models import (
+    Tenant, User, Channel, Message, Checkin, Blocker, Digest, AuditLog, SystemSetting, Sprint, Task,
+    PerformanceCycle, PerformanceGoal
+)
 from backend.app.integrations.teams_cards import TeamsCardGenerator
 from backend.app.integrations.azure_devops import devops_client
 
@@ -1007,6 +1010,121 @@ def seed_database():
             })
         )
         db.add(initial_digest)
+        print("8. Seeding Performance Cycles & Goals (Independent Performance Points System)...")
+        cycle_q1 = PerformanceCycle(
+            tenant_id=tenant1.id,
+            name="2026-Q1",
+            start_date=now - timedelta(days=90),
+            end_date=now - timedelta(days=1),
+            status="closed",
+            description="Q1 2026 Enterprise Engineering Performance & OKR Cycle"
+        )
+        cycle_q2 = PerformanceCycle(
+            tenant_id=tenant1.id,
+            name="2026-Q2",
+            start_date=now,
+            end_date=now + timedelta(days=90),
+            status="active",
+            description="Q2 2026 Active Performance & Key Results Cycle"
+        )
+        db.add_all([cycle_q1, cycle_q2])
+        db.flush()
+
+        # Goal 1 (Q1, incomplete 70%): Priya completed 70% of 10 points -> 7 earned, 3 remaining
+        g1_priya_q1 = PerformanceGoal(
+            tenant_id=tenant1.id,
+            cycle_id=cycle_q1.id,
+            user_id=priya.id,
+            created_by=vikram.id,
+            title="Core OAuth 2.1 & Tenant Data Isolation Engine",
+            description="Architect and implement zero-trust OAuth 2.1 and cryptographic tenant isolation.",
+            assigned_points=10.0,
+            target_percentage=100.0,
+            current_progress_percentage=70.0,
+            previously_earned_points=0.0,
+            earned_points=7.0,
+            remaining_points=3.0,
+            status="carried_forward",
+            deadline=now - timedelta(days=5)
+        )
+        db.add(g1_priya_q1)
+        db.flush()
+
+        # Goal 2 (Q2, carried from Q1): Carried forward with 7 previously earned, remaining available = 3
+        # Currently at 70%, 0 new earned in Q2, 3 available
+        g2_priya_q2 = PerformanceGoal(
+            tenant_id=tenant1.id,
+            cycle_id=cycle_q2.id,
+            user_id=priya.id,
+            created_by=vikram.id,
+            title="Core OAuth 2.1 & Tenant Data Isolation Engine",
+            description="Architect and implement zero-trust OAuth 2.1 and cryptographic tenant isolation (Carried from Q1).",
+            assigned_points=10.0,
+            target_percentage=100.0,
+            current_progress_percentage=70.0,
+            previously_earned_points=7.0,
+            earned_points=0.0,
+            remaining_points=3.0,
+            status="in_progress",
+            deadline=now + timedelta(days=30),
+            carried_from_goal_id=g1_priya_q1.id
+        )
+
+        # Goal 3 (Q2, new): Priya assigned 8 points, currently at 50%
+        g3_priya_new = PerformanceGoal(
+            tenant_id=tenant1.id,
+            cycle_id=cycle_q2.id,
+            user_id=priya.id,
+            created_by=vikram.id,
+            title="Real-Time Standup Chat Synthesis Pipeline",
+            description="Deploy high-throughput async processing for Slack/Teams meeting-free summaries.",
+            assigned_points=8.0,
+            target_percentage=100.0,
+            current_progress_percentage=50.0,
+            previously_earned_points=0.0,
+            earned_points=4.0,
+            remaining_points=4.0,
+            status="in_progress",
+            deadline=now + timedelta(days=60)
+        )
+
+        # Goal 4 (Q2): Elena 12 points, 100% completed
+        g4_elena = PerformanceGoal(
+            tenant_id=tenant1.id,
+            cycle_id=cycle_q2.id,
+            user_id=elena.id,
+            created_by=vikram.id,
+            title="Multi-Cloud Resilience & Azure Service Bus Ingestion",
+            description="High-availability fallback across regions with zero message drop guarantee.",
+            assigned_points=12.0,
+            target_percentage=100.0,
+            current_progress_percentage=100.0,
+            previously_earned_points=0.0,
+            earned_points=12.0,
+            remaining_points=0.0,
+            status="completed",
+            deadline=now + timedelta(days=45)
+        )
+
+        # Goal 5 (Q2): Rohan 6 points, 40% completed
+        g5_rohan = PerformanceGoal(
+            tenant_id=tenant1.id,
+            cycle_id=cycle_q2.id,
+            user_id=rohan.id,
+            created_by=vikram.id,
+            title="Redis Ingestion Layer & Memory Profile Benchmarking",
+            description="Benchmark sub-50ms Redis responses under 100 concurrent distributed tenant streams.",
+            assigned_points=6.0,
+            target_percentage=100.0,
+            current_progress_percentage=40.0,
+            previously_earned_points=0.0,
+            earned_points=2.4,
+            remaining_points=3.6,
+            status="in_progress",
+            deadline=now + timedelta(days=45)
+        )
+
+        db.add_all([g2_priya_q2, g3_priya_new, g4_elena, g5_rohan])
 
         db.add(AuditLog(
             action="seed_phase2_initialization",

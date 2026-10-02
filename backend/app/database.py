@@ -76,6 +76,11 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE audit_logs ADD COLUMN old_values_json TEXT"))
                 if "new_values_json" not in cols:
                     conn.execute(text("ALTER TABLE audit_logs ADD COLUMN new_values_json TEXT"))
+            # 7. Check performance_goals
+            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(performance_goals)"))]
+            if cols:
+                if "category" not in cols:
+                    conn.execute(text("ALTER TABLE performance_goals ADD COLUMN category VARCHAR(50) DEFAULT 'delivery'"))
             conn.commit()
     except Exception as e:
         print(f"Warning during run_migrations: {e}")

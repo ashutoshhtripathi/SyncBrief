@@ -574,3 +574,373 @@ def test_logout_revokes_refresh_token():
     revoked_refresh = client.post("/api/auth/refresh", json={"refresh_token": new_refresh_token})
     assert revoked_refresh.status_code == 401
     assert "revoked" in revoked_refresh.json()["detail"].lower() or "invalid" in revoked_refresh.json()["detail"].lower()
+
+
+# =========================================================================
+# 11. HIERARCHY SECURITY AUTHORIZATION SUITE (SCENARIOS A - J)
+# =========================================================================
+
+def test_scenario_a_l2_manager_can_modify_own_l3_employee():
+    """
+    Scenario A: L2 Manager -> own L3 employee
+    Expected: ALLOWED (HTTP 200)
+    Vikram (L2) can update Priya's profile (L3 reporting to Vikram).
+    """
+    db = SessionLocal()
+    try:
+        priya = db.query(User).filter(User.email == "priya.sharma@syncbrief.ai").first()
+        assert priya is not None
+        priya_id = priya.id
+    finally:
+        db.close()
+
+    vikram_headers = get_headers("vikram.joshi@syncbrief.ai")
+    resp = client.put(
+        f"/api/auth/users/{priya_id}",
+        json={"title": "Principal Frontend Engineer"},
+        headers=vikram_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "Principal Frontend Engineer"
+
+
+def test_scenario_b_l2_manager_cannot_modify_or_delete_director():
+    """
+    Scenario B: L2 Manager -> own Director/L1
+    Expected: HTTP 403 Forbidden
+    Vikram (L2) cannot update or delete Sarah Jenkins (Director L1).
+    """
+    db = SessionLocal()
+    try:
+        sarah = db.query(User).filter(User.email == "sarah.jenkins@syncbrief.ai").first()
+        assert sarah is not None
+        sarah_id = sarah.id
+    finally:
+        db.close()
+
+    vikram_headers = get_headers("vikram.joshi@syncbrief.ai")
+
+    # Attempt to update Director -> 403
+    resp_update = client.put(
+        f"/api/auth/users/{sarah_id}",
+        json={"title": "Demoted Director"},
+        headers=vikram_headers
+    )
+    assert resp_update.status_code == 403
+    assert "Director" in resp_update.json()["detail"] or "Forbidden" in resp_update.json()["detail"]
+
+    # Attempt to delete Director -> 403
+    resp_delete = client.delete(
+        f"/api/auth/users/{sarah_id}",
+        headers=vikram_headers
+    )
+    assert resp_delete.status_code == 403
+    assert "Director" in resp_delete.json()["detail"] or "Forbidden" in resp_delete.json()["detail"]
+
+
+def test_scenario_c_l2_manager_cannot_modify_peer_manager():
+    """
+    Scenario C: L2 Manager -> another L2 Manager
+    Expected: HTTP 403 Forbidden
+    Vikram (L2) cannot update or delete James Wilson (L2 peer manager).
+    """
+    db = SessionLocal()
+    try:
+        james = db.query(User).filter(User.email == "james.wilson@syncbrief.ai").first()
+        assert james is not None
+        james_id = james.id
+    finally:
+        db.close()
+
+    vikram_headers = get_headers("vikram.joshi@syncbrief.ai")
+
+    # Attempt to update peer Manager -> 403
+    resp_update = client.put(
+        f"/api/auth/users/{james_id}",
+        json={"title": "Hacked Manager Title"},
+        headers=vikram_headers
+    )
+    assert resp_update.status_code == 403
+    assert "Manager" in resp_update.json()["detail"] or "Forbidden" in resp_update.json()["detail"]
+
+    # Attempt to delete peer Manager -> 403
+    resp_delete = client.delete(
+        f"/api/auth/users/{james_id}",
+        headers=vikram_headers
+    )
+    assert resp_delete.status_code == 403
+    assert "Manager" in resp_delete.json()["detail"] or "Forbidden" in resp_delete.json()["detail"]
+
+
+def test_scenario_d_l3_employee_cannot_modify_manager():
+    """
+    Scenario D: L3 Employee -> Manager/L2
+    Expected: HTTP 403 Forbidden
+    Elena (L3) cannot update or delete Vikram (L2).
+    """
+    db = SessionLocal()
+    try:
+        vikram = db.query(User).filter(User.email == "vikram.joshi@syncbrief.ai").first()
+        assert vikram is not None
+        vikram_id = vikram.id
+    finally:
+        db.close()
+
+    elena_headers = get_headers("elena.rostova@syncbrief.ai")
+
+    resp_update = client.put(
+        f"/api/auth/users/{vikram_id}",
+        json={"title": "Modified by Employee"},
+        headers=elena_headers
+    )
+    assert resp_update.status_code == 403
+
+    resp_delete = client.delete(
+        f"/api/auth/users/{vikram_id}",
+        headers=elena_headers
+    )
+    assert resp_delete.status_code == 403
+
+
+def test_scenario_e_l3_employee_cannot_modify_director():
+    """
+    Scenario E: L3 Employee -> Director/L1
+    Expected: HTTP 403 Forbidden
+    Elena (L3) cannot update or delete Sarah Jenkins (Director L1).
+    """
+    db = SessionLocal()
+    try:
+        sarah = db.query(User).filter(User.email == "sarah.jenkins@syncbrief.ai").first()
+        assert sarah is not None
+        sarah_id = sarah.id
+    finally:
+        db.close()
+
+    elena_headers = get_headers("elena.rostova@syncbrief.ai")
+
+    resp_update = client.put(
+        f"/api/auth/users/{sarah_id}",
+        json={"title": "Modified by Employee"},
+        headers=elena_headers
+    )
+    assert resp_update.status_code == 403
+
+    resp_delete = client.delete(
+        f"/api/auth/users/{sarah_id}",
+        headers=elena_headers
+    )
+    assert resp_delete.status_code == 403
+
+
+def test_scenario_f_l2_manager_cannot_promote_l3_to_l1():
+    """
+    Scenario F: L2 Manager attempts to promote an L3 user to L1
+    Expected: HTTP 403 Forbidden
+    Vikram (L2) attempts to set role='director' or role_level=1 on Priya (L3).
+    """
+    db = SessionLocal()
+    try:
+        priya = db.query(User).filter(User.email == "priya.sharma@syncbrief.ai").first()
+        assert priya is not None
+        priya_id = priya.id
+    finally:
+        db.close()
+
+    vikram_headers = get_headers("vikram.joshi@syncbrief.ai")
+
+    # Attempt promotion by role='director'
+    resp_role = client.put(
+        f"/api/auth/users/{priya_id}",
+        json={"role": "director"},
+        headers=vikram_headers
+    )
+    assert resp_role.status_code == 403
+    assert "Forbidden" in resp_role.json()["detail"]
+
+    # Attempt promotion by role_level=1
+    resp_level = client.put(
+        f"/api/auth/users/{priya_id}",
+        json={"role_level": 1},
+        headers=vikram_headers
+    )
+    assert resp_level.status_code == 403
+    assert "Forbidden" in resp_level.json()["detail"]
+
+    # Attempt promotion by role_level=2 (manager)
+    resp_l2 = client.put(
+        f"/api/auth/users/{priya_id}",
+        json={"role_level": 2},
+        headers=vikram_headers
+    )
+    assert resp_l2.status_code == 403
+    assert "Forbidden" in resp_l2.json()["detail"]
+
+
+def test_scenario_g_l2_manager_cannot_change_reports_to_unauthorized():
+    """
+    Scenario G: L2 Manager attempts to change reports_to_id to an unauthorized manager
+    Expected: HTTP 403 Forbidden
+    Vikram (L2) attempts to reassign Priya (L3) to report to Sarah (L1), James (L2 peer), or None.
+    """
+    db = SessionLocal()
+    try:
+        priya = db.query(User).filter(User.email == "priya.sharma@syncbrief.ai").first()
+        sarah = db.query(User).filter(User.email == "sarah.jenkins@syncbrief.ai").first()
+        james = db.query(User).filter(User.email == "james.wilson@syncbrief.ai").first()
+        priya_id = priya.id
+        sarah_id = sarah.id
+        james_id = james.id
+    finally:
+        db.close()
+
+    vikram_headers = get_headers("vikram.joshi@syncbrief.ai")
+
+    # Reassigning to Director -> 403
+    resp_director = client.put(
+        f"/api/auth/users/{priya_id}",
+        json={"reports_to_id": sarah_id},
+        headers=vikram_headers
+    )
+    assert resp_director.status_code == 403
+    assert "Forbidden" in resp_director.json()["detail"]
+
+    # Reassigning to peer Manager -> 403
+    resp_peer = client.put(
+        f"/api/auth/users/{priya_id}",
+        json={"reports_to_id": james_id},
+        headers=vikram_headers
+    )
+    assert resp_peer.status_code == 403
+    assert "Forbidden" in resp_peer.json()["detail"]
+
+    # Reassigning to None (detaching) -> 403
+    resp_none = client.put(
+        f"/api/auth/users/{priya_id}",
+        json={"reports_to_id": None},
+        headers=vikram_headers
+    )
+    assert resp_none.status_code == 403
+    assert "Forbidden" in resp_none.json()["detail"]
+
+
+def test_scenario_h_l2_manager_cannot_create_privileged_user():
+    """
+    Scenario H: L2 Manager attempts to create an L1/L2 privileged user
+    Expected: HTTP 403 Forbidden
+    Vikram (L2) attempts to create a user with role='director', role='manager', role_level=1, or role_level=2.
+    """
+    vikram_headers = get_headers("vikram.joshi@syncbrief.ai")
+
+    # Creating Director (L1) -> 403
+    resp_create_l1 = client.post(
+        "/api/auth/users",
+        json={
+            "full_name": "Rogue Director",
+            "email": "rogue.director@syncbrief.ai",
+            "password": "Password123!",
+            "role": "director",
+            "role_level": 1,
+            "title": "Director of Backdoors"
+        },
+        headers=vikram_headers
+    )
+    assert resp_create_l1.status_code == 403
+    assert "Forbidden" in resp_create_l1.json()["detail"]
+
+    # Creating Manager (L2) -> 403
+    resp_create_l2 = client.post(
+        "/api/auth/users",
+        json={
+            "full_name": "Rogue Manager",
+            "email": "rogue.manager@syncbrief.ai",
+            "password": "Password123!",
+            "role": "manager",
+            "role_level": 2,
+            "title": "Manager of Backdoors"
+        },
+        headers=vikram_headers
+    )
+    assert resp_create_l2.status_code == 403
+    assert "Forbidden" in resp_create_l2.json()["detail"]
+
+
+def test_scenario_i_cross_tenant_user_modification_forbidden():
+    """
+    Scenario I: Cross-tenant user modification
+    Expected: HTTP 403/404 according to existing API behavior
+    Vikram/Sarah (Tenant 1) modifying Alice (Tenant 2) -> 403 Forbidden.
+    Modifying non-existent user -> 404 Not Found.
+    """
+    db = SessionLocal()
+    try:
+        alice = db.query(User).filter(User.email == "alice.smith@acme.com").first()
+        assert alice is not None
+        alice_id = alice.id
+    finally:
+        db.close()
+
+    vikram_headers = get_headers("vikram.joshi@syncbrief.ai")
+    sarah_headers = get_headers("sarah.jenkins@syncbrief.ai")
+
+    # Vikram (Tenant 1) attempts PUT on Alice (Tenant 2) -> 403
+    resp_vikram = client.put(
+        f"/api/auth/users/{alice_id}",
+        json={"title": "Cross Tenant Exploit"},
+        headers=vikram_headers
+    )
+    assert resp_vikram.status_code == 403
+    assert "Forbidden" in resp_vikram.json()["detail"]
+
+    # Sarah (Director Tenant 1) attempts PUT on Alice (Tenant 2) -> 403
+    resp_sarah = client.put(
+        f"/api/auth/users/{alice_id}",
+        json={"title": "Cross Tenant Exploit by Director"},
+        headers=sarah_headers
+    )
+    assert resp_sarah.status_code == 403
+    assert "Forbidden" in resp_sarah.json()["detail"]
+
+    # Non-existent user -> 404
+    resp_404 = client.put(
+        "/api/auth/users/999999",
+        json={"title": "Ghost"},
+        headers=sarah_headers
+    )
+    assert resp_404.status_code == 404
+
+
+def test_scenario_j_director_can_manage_authorized_subordinates():
+    """
+    Scenario J: L1 Director -> authorized subordinate management
+    Expected: ALLOWED (HTTP 200)
+    Sarah (L1 Director) can manage subordinate Managers (L2) and Employees (L3).
+    """
+    db = SessionLocal()
+    try:
+        vikram = db.query(User).filter(User.email == "vikram.joshi@syncbrief.ai").first()
+        rohan = db.query(User).filter(User.email == "rohan.patel@syncbrief.ai").first()
+        vikram_id = vikram.id
+        rohan_id = rohan.id
+    finally:
+        db.close()
+
+    sarah_headers = get_headers("sarah.jenkins@syncbrief.ai")
+
+    # Sarah updates Vikram (L2 Manager) -> 200 OK
+    resp_vikram = client.put(
+        f"/api/auth/users/{vikram_id}",
+        json={"title": "VP of Engineering & Architecture"},
+        headers=sarah_headers
+    )
+    assert resp_vikram.status_code == 200
+    assert resp_vikram.json()["title"] == "VP of Engineering & Architecture"
+
+    # Sarah updates Rohan (L3 Employee) -> 200 OK
+    resp_rohan = client.put(
+        f"/api/auth/users/{rohan_id}",
+        json={"title": "Lead Backend Architect"},
+        headers=sarah_headers
+    )
+    assert resp_rohan.status_code == 200
+    assert resp_rohan.json()["title"] == "Lead Backend Architect"
+
