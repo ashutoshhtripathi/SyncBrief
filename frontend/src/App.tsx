@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -13,6 +13,7 @@ import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
+import { OAuthCallbackPage } from './pages/OAuthCallbackPage';
 import { LandingPage } from './pages/LandingPage';
 import { CheckinPage } from './pages/CheckinPage';
 import { DigestPage } from './pages/DigestPage';
@@ -39,6 +40,7 @@ const queryClient = new QueryClient({
 const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
@@ -125,6 +127,10 @@ const AppContent: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigate]);
+
+  if (location.pathname === '/auth/callback') {
+    return <OAuthCallbackPage />;
+  }
 
   if (isLoading) {
     return (

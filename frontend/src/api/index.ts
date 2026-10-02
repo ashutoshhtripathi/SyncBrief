@@ -17,12 +17,51 @@ import {
   PerformanceCycle,
   PerformanceGoal,
   PerformanceSummaryEmployee,
-  PerformanceAppraisalEvidenceResponse
+  PerformanceAppraisalEvidenceResponse,
+  OAuthConfig,
+  OAuthCallbackPayload
 } from '../types';
 
 const API_BASE = '/api';
 
-const getStorage = () => (typeof window !== 'undefined' ? window.localStorage : null);
+export interface AuthStorage {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+}
+
+export const getStorage = (): AuthStorage | null => {
+  if (typeof window === 'undefined') return null;
+  return {
+    getItem: (key: string): string | null => {
+      try {
+        const sessionVal = window.sessionStorage?.getItem(key);
+        if (sessionVal !== null && sessionVal !== undefined) return sessionVal;
+      } catch {}
+      try {
+        return window.localStorage?.getItem(key) || null;
+      } catch {
+        return null;
+      }
+    },
+    setItem: (key: string, value: string): void => {
+      try {
+        window.sessionStorage?.setItem(key, value);
+      } catch {}
+      try {
+        window.localStorage?.setItem(key, value);
+      } catch {}
+    },
+    removeItem: (key: string): void => {
+      try {
+        window.sessionStorage?.removeItem(key);
+      } catch {}
+      try {
+        window.localStorage?.removeItem(key);
+      } catch {}
+    }
+  };
+};
 
 export function getAuthHeaders(): HeadersInit {
   const token = getStorage()?.getItem('syncbrief_token');
@@ -78,6 +117,68 @@ export async function getCurrentUser(): Promise<User> {
   });
   if (!res.ok) throw new Error('Failed to get user');
   return res.json();
+}
+
+// --- Social / SSO Authentication ---
+export async function fetchOAuthConfig(): Promise<OAuthConfig> {
+  const res = await fetch(`${API_BASE}/auth/oauth/config`);
+  if (!res.ok) throw new Error('Failed to load OAuth configuration');
+  return res.json();
+}
+
+export async function startOAuthFlow(provider: 'google' | 'microsoft'): Promise<{
+  provider: string;
+  authorization_url: string;
+  state: string;
+  code_verifier?: string | null;
+}> {
+  const res = await fetch(`${API_BASE}/auth/oauth/start/${provider}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `Failed to initiate ${provider} authentication` }));
+    throw new Error(err.detail || `Failed to initiate ${provider} authentication`);
+  }
+  return res.json();
+}
+
+export async function exchangeOAuthCode(payload: OAuthCallbackPayload): Promise<{ access_token: string; refresh_token?: string; user: User }> {
+  const res = await fetch(`${API_BASE}/auth/oauth/callback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'OAuth authentication failed' }));
+    throw new Error(err.detail || 'OAuth authentication failed');
+  }
+  const data = await res.json();
+  const storage = getStorage();
+  storage?.setItem('syncbrief_token', data.access_token);
+  storage?.setItem('syncbrief_user', JSON.stringify(data.user));
+  if (data.refresh_token) {
+    storage?.setItem('syncbrief_refresh_token', data.refresh_token);
+  }
+  return data;
+}
+
+export function generateRandomString(length = 64): string {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    const array = new Uint8Array(length);
+    window.crypto.getRandomValues(array);
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    return Array.from(array, (byte) => chars[byte % chars.length]).join('');
+  }
+  return Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+}
+
+export async function generateCodeChallenge(verifier: string): Promise<string> {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await window.crypto.subtle.digest('SHA-256', data);
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  return verifier;
 }
 
 // --- Check-ins ---

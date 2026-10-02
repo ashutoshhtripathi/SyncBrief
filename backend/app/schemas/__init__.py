@@ -20,6 +20,29 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: Dict[str, Any]
 
+class OAuthCallbackRequest(BaseModel):
+    provider: str  # "google" | "microsoft"
+    code: str
+    redirect_uri: str
+    code_verifier: Optional[str] = None
+
+class OAuthProviderConfig(BaseModel):
+    enabled: bool
+    client_id: Optional[str] = None
+    redirect_uri: str
+    auth_endpoint: str
+    tenant_id: Optional[str] = None
+
+class OAuthConfigResponse(BaseModel):
+    google: OAuthProviderConfig
+    microsoft: OAuthProviderConfig
+
+class OAuthStartResponse(BaseModel):
+    provider: str
+    authorization_url: str
+    state: str
+    code_verifier: Optional[str] = None
+
 class TenantResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

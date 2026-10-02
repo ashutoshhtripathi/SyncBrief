@@ -50,6 +50,10 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE users ADD COLUMN refresh_token VARCHAR(500)"))
                 if "deleted_at" not in cols:
                     conn.execute(text("ALTER TABLE users ADD COLUMN deleted_at DATETIME"))
+                if "auth_provider" not in cols:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN auth_provider VARCHAR(50) DEFAULT 'local'"))
+                if "auth_provider_id" not in cols:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN auth_provider_id VARCHAR(255)"))
             # 4. Check sprints
             cols = [r[1] for r in conn.execute(text("PRAGMA table_info(sprints)"))]
             if cols and "deleted_at" not in cols:

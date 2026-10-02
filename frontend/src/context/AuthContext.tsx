@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { getCurrentUser, loginWithCredentials } from '../api';
+import { getCurrentUser, loginWithCredentials, getStorage } from '../api';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   loginAs: (role: 'manager' | 'member' | 'admin', userId?: number) => Promise<void>;
   loginWithEmail: (email: string, password?: string) => Promise<void>;
+  loginWithOAuthResult: (tokenData: { access_token: string; refresh_token?: string; user: User }) => void;
   logout: () => void;
   switchRole: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -22,9 +23,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const u = await getCurrentUser();
       setUser(u);
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem('syncbrief_user', JSON.stringify(u));
-      }
+      const storage = getStorage();
+      storage?.setItem('syncbrief_user', JSON.stringify(u));
     } catch {
       // ignore
     }
@@ -33,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     async function initAuth() {
       try {
-        const storage = typeof window !== 'undefined' ? window.localStorage : null;
+        const storage = getStorage();
         const token = storage?.getItem('syncbrief_token');
 
         if (token) {
@@ -42,9 +42,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(currentUser);
             storage?.setItem('syncbrief_user', JSON.stringify(currentUser));
           } catch {
-            // Token is invalid, expired, or rejected by backend (e.g. 401 Unauthorized)
+            // Token is invalid, expired, or invalidated by application restart (401 Unauthorized)
             storage?.removeItem('syncbrief_token');
             storage?.removeItem('syncbrief_user');
+            storage?.removeItem('syncbrief_refresh_token');
             setUser(null);
           }
         } else {
@@ -70,12 +71,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem('syncbrief_token');
-      window.localStorage.removeItem('syncbrief_user');
-      window.localStorage.removeItem('syncbrief_refresh_token');
+  const loginWithOAuthResult = (tokenData: { access_token: string; refresh_token?: string; user: User }) => {
+    const storage = getStorage();
+    storage?.setItem('syncbrief_token', tokenData.access_token);
+    storage?.setItem('syncbrief_user', JSON.stringify(tokenData.user));
+    if (tokenData.refresh_token) {
+      storage?.setItem('syncbrief_refresh_token', tokenData.refresh_token);
     }
+    setUser(tokenData.user);
+  };
+
+  const logout = () => {
+    const storage = getStorage();
+    storage?.removeItem('syncbrief_token');
+    storage?.removeItem('syncbrief_user');
+    storage?.removeItem('syncbrief_refresh_token');
     setUser(null);
   };
 
@@ -89,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, loginAs, loginWithEmail, logout, switchRole, refreshUser }}>
+    <AuthContext.Provider value={{ user, isLoading, loginAs, loginWithEmail, loginWithOAuthResult, logout, switchRole, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

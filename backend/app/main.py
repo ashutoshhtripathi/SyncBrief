@@ -34,7 +34,7 @@ app = FastAPI(
 
 # Enterprise Security Headers & Rate Limiting
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RateLimitMiddleware, max_requests=300, window_seconds=60)
+app.add_middleware(RateLimitMiddleware, max_requests=1000, window_seconds=60)
 
 # Configure CORS for local development and containerized environments
 app.add_middleware(
@@ -66,6 +66,8 @@ app.include_router(audit_router, prefix=settings.API_V1_STR)
 def health_check():
     return {"status": "ok", "service": "SyncBrief AI"}
 
+from backend.app.auth_utils import SERVER_BOOT_ID
+
 @app.get("/api/status", tags=["System Status"])
 def system_status():
     ai = get_ai_provider()
@@ -73,6 +75,7 @@ def system_status():
         "status": "online",
         "app_name": "SyncBrief AI",
         "version": "2.0.0",
+        "boot_id": SERVER_BOOT_ID,
         "ai_provider": ai.name,
         "is_mock": ai.is_mock,
         "badge_label": "Demo AI (Offline)" if ai.is_mock else f"Azure OpenAI ({settings.AZURE_OPENAI_DEPLOYMENT})",

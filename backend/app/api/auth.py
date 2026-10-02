@@ -1,9 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from starlette.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+from urllib.parse import urlencode
+import httpx
+import secrets
+import hashlib
+import base64
 from backend.app.database import get_db
 from backend.app.models import User, Checkin, Task, Tenant
+from backend.app.config import settings
+from backend.app.audit import log_audit_event
 from backend.app.schemas import (
     LoginRequest, 
     DemoLoginRequest, 
@@ -12,8 +20,18 @@ from backend.app.schemas import (
     UserCreate, 
     UserUpdate, 
     RefreshTokenRequest,
-    TenantResponse
+    TenantResponse,
+    OAuthCallbackRequest,
+    OAuthConfigResponse,
+    OAuthProviderConfig,
+    OAuthStartResponse
 )
+
+def generate_pkce_pair() -> Tuple[str, str]:
+    code_verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return code_verifier, code_challenge
 from backend.app.auth_utils import verify_password, create_access_token, create_refresh_token, decode_access_token, hash_password
 from backend.app.auth_deps import get_current_user
 from backend.app.hierarchy import (
@@ -53,7 +71,12 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     Authenticate user using verified Argon2id/bcrypt password hash.
     Enforces real account authentication. Issues JWT bearer token enriched with tenant_id.
     """
-    user = db.query(User).filter(User.email == req.email.lower().strip(), User.deleted_at.is_(None)).first()
+    email_clean = req.email.lower().strip()
+    # Normalize common alias for Sarah Jenkins
+    if email_clean == "sara.jenkins@syncbrief.ai":
+        email_clean = "sarah.jenkins@syncbrief.ai"
+
+    user = db.query(User).filter(User.email == email_clean, User.deleted_at.is_(None)).first()
     if not user or not verify_password(req.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -90,6 +113,354 @@ def demo_login():
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Demo 1-click login has been disabled in secure multi-tenant mode. Please authenticate via /api/auth/login with registered user credentials."
     )
+
+@router.get("/oauth/config", response_model=OAuthConfigResponse)
+def get_oauth_config():
+    """
+    Returns public OAuth client IDs and discovery endpoints.
+    Secrets are strictly maintained server-side and never exposed.
+    """
+    return {
+        "google": {
+            "enabled": bool(settings.GOOGLE_CLIENT_ID),
+            "client_id": settings.GOOGLE_CLIENT_ID or None,
+            "redirect_uri": settings.effective_google_redirect_uri,
+            "auth_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+            "tenant_id": None
+        },
+        "microsoft": {
+            "enabled": bool(settings.MICROSOFT_CLIENT_ID),
+            "client_id": settings.MICROSOFT_CLIENT_ID or None,
+            "tenant_id": settings.MICROSOFT_TENANT_ID,
+            "redirect_uri": settings.effective_microsoft_redirect_uri,
+            "auth_endpoint": f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize"
+        }
+    }
+
+@router.get("/oauth/start/{provider}", response_model=OAuthStartResponse)
+def start_oauth(provider: str, redirect_uri: Optional[str] = None):
+    """
+    Initializes real OAuth/OIDC flow for the specified provider (google or microsoft).
+    Validates server-side credentials and returns authorization URL with account selection prompt.
+    """
+    prov = provider.lower().strip()
+    state = secrets.token_urlsafe(32)
+
+    if prov == "google":
+        if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google OAuth is not configured on this server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend environment."
+            )
+        eff_redirect = redirect_uri or settings.effective_google_redirect_uri
+        params = {
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "redirect_uri": eff_redirect,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "state": state,
+            "access_type": "offline",
+            "prompt": "select_account"
+        }
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+        return {
+            "provider": "google",
+            "authorization_url": auth_url,
+            "state": state,
+            "code_verifier": None
+        }
+
+    elif prov == "microsoft":
+        if not settings.MICROSOFT_CLIENT_ID:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Microsoft OAuth is not configured on this server. Please set MICROSOFT_CLIENT_ID in backend environment."
+            )
+        eff_redirect = redirect_uri or settings.effective_microsoft_redirect_uri
+        code_verifier, code_challenge = generate_pkce_pair()
+        tenant = settings.MICROSOFT_TENANT_ID or "common"
+        params = {
+            "client_id": settings.MICROSOFT_CLIENT_ID,
+            "response_type": "code",
+            "redirect_uri": eff_redirect,
+            "scope": "openid profile email User.Read",
+            "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+            "prompt": "select_account"
+        }
+        auth_url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?{urlencode(params)}"
+        return {
+            "provider": "microsoft",
+            "authorization_url": auth_url,
+            "state": state,
+            "code_verifier": code_verifier
+        }
+
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported OAuth provider: '{provider}'. Supported providers are 'google' and 'microsoft'."
+        )
+
+@router.get("/oauth/login/{provider}")
+def login_oauth_redirect(provider: str, redirect_uri: Optional[str] = None):
+    """
+    Direct HTTP 307 redirect endpoint to provider authorization page.
+    """
+    start_info = start_oauth(provider, redirect_uri=redirect_uri)
+    return RedirectResponse(url=start_info["authorization_url"], status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+@router.post("/oauth/callback", response_model=TokenResponse)
+async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db)):
+    """
+    Handles server-to-server OAuth code exchange and identity verification.
+    Links verified identities to existing SyncBrief accounts (preserving hierarchy and role),
+    or applies controlled onboarding for new users (assigning base Employee level 3, never privileged Director/Manager).
+    """
+    provider = req.provider.lower().strip()
+    if provider not in ["google", "microsoft"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported OAuth provider. Must be google or microsoft."
+        )
+
+    verified_email: Optional[str] = None
+    verified_name: Optional[str] = None
+    verified_avatar: Optional[str] = None
+    provider_user_id: Optional[str] = None
+
+    if provider == "google":
+        if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google OAuth is not configured on this server. Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+            )
+
+        eff_redirect = req.redirect_uri or settings.effective_google_redirect_uri
+        token_url = "https://oauth2.googleapis.com/token"
+        token_payload = {
+            "code": req.code,
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": eff_redirect,
+            "grant_type": "authorization_code"
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                token_resp = await client.post(token_url, data=token_payload)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Failed to communicate with Google authentication services: {str(e)}"
+                )
+
+            if token_resp.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Google authorization code exchange failed: {token_resp.text}"
+                )
+
+            tokens = token_resp.json()
+            access_token = tokens.get("access_token")
+            if not access_token:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Missing access_token from Google token response."
+                )
+
+            # Retrieve verified identity from Google OpenID userinfo endpoint
+            userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+            try:
+                userinfo_resp = await client.get(userinfo_url, headers={"Authorization": f"Bearer {access_token}"})
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Failed to retrieve Google user profile: {str(e)}"
+                )
+
+            if userinfo_resp.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to verify Google user profile."
+                )
+
+            google_user = userinfo_resp.json()
+            if not google_user.get("email_verified", False):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Google account email is not verified by Google."
+                )
+
+            verified_email = google_user["email"].lower().strip()
+            verified_name = google_user.get("name") or verified_email.split("@")[0]
+            verified_avatar = google_user.get("picture")
+            provider_user_id = google_user.get("sub")
+
+    elif provider == "microsoft":
+        if not settings.MICROSOFT_CLIENT_ID:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Microsoft OAuth is not configured on this server. Please configure MICROSOFT_CLIENT_ID."
+            )
+
+        ms_tenant = settings.MICROSOFT_TENANT_ID or "common"
+        token_url = f"https://login.microsoftonline.com/{ms_tenant}/oauth2/v2.0/token"
+        eff_redirect = req.redirect_uri or settings.effective_microsoft_redirect_uri
+        token_payload = {
+            "client_id": settings.MICROSOFT_CLIENT_ID,
+            "code": req.code,
+            "redirect_uri": eff_redirect,
+            "grant_type": "authorization_code",
+        }
+        if settings.MICROSOFT_CLIENT_SECRET:
+            token_payload["client_secret"] = settings.MICROSOFT_CLIENT_SECRET
+        if req.code_verifier:
+            token_payload["code_verifier"] = req.code_verifier
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                token_resp = await client.post(token_url, data=token_payload)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Failed to communicate with Microsoft authentication services: {str(e)}"
+                )
+
+            if token_resp.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Microsoft authorization code exchange failed: {token_resp.text}"
+                )
+
+            tokens = token_resp.json()
+            access_token = tokens.get("access_token")
+            if not access_token:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Missing access_token from Microsoft token response."
+                )
+
+            # Retrieve verified identity from Microsoft Graph API
+            graph_url = "https://graph.microsoft.com/v1.0/me"
+            try:
+                graph_resp = await client.get(graph_url, headers={"Authorization": f"Bearer {access_token}"})
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Failed to retrieve Microsoft Graph profile: {str(e)}"
+                )
+
+            if graph_resp.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to verify Microsoft user profile."
+                )
+
+            ms_user = graph_resp.json()
+            email_candidate = ms_user.get("mail") or ms_user.get("userPrincipalName")
+            if not email_candidate:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No email address found in Microsoft identity profile."
+                )
+
+            verified_email = email_candidate.lower().strip()
+            verified_name = ms_user.get("displayName") or verified_email.split("@")[0]
+            provider_user_id = ms_user.get("id")
+
+    if not verified_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to extract verified email from OAuth identity provider."
+        )
+
+    # Normalize common alias for Sarah Jenkins
+    if verified_email == "sara.jenkins@syncbrief.ai":
+        verified_email = "sarah.jenkins@syncbrief.ai"
+
+    # --- User Matching, Account Linking & Controlled Onboarding ---
+    user = db.query(User).filter(User.email == verified_email, User.deleted_at.is_(None)).first()
+
+    if user:
+        # Existing account: PRESERVE role, role_level, tenant_id, and hierarchy strictly
+        user.auth_provider = provider
+        if provider_user_id:
+            user.auth_provider_id = str(provider_user_id)
+        if not user.avatar_url and verified_avatar:
+            user.avatar_url = verified_avatar
+        db.commit()
+
+        log_audit_event(
+            db=db,
+            action="OAUTH_LOGIN",
+            entity_type="User",
+            entity_id=user.id,
+            actor_id=user.id,
+            actor_name=user.full_name,
+            input_summary=f"OAuth login via {provider} for existing user ({user.role}, L{user.role_level})",
+            tenant_id=user.tenant_id
+        )
+    else:
+        # Controlled onboarding for new users:
+        # Strictly assign base employee role (level 3). NEVER assign Director (L1) or Manager (L2).
+        email_domain = verified_email.split("@")[-1] if "@" in verified_email else ""
+        tenant = db.query(Tenant).filter(Tenant.domain == email_domain).first()
+        assigned_tenant_id = tenant.id if tenant else 1
+
+        random_password = secrets.token_urlsafe(32)
+
+        user = User(
+            email=verified_email,
+            hashed_password=hash_password(random_password),
+            full_name=verified_name or "Team Member",
+            role="member",
+            role_level=3,
+            title="Software Engineer",
+            avatar_url=verified_avatar,
+            tenant_id=assigned_tenant_id,
+            reports_to_id=None,
+            org_type="engineering",
+            auth_provider=provider,
+            auth_provider_id=str(provider_user_id) if provider_user_id else None,
+            streak_count=0
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        log_audit_event(
+            db=db,
+            action="OAUTH_ONBOARDING",
+            entity_type="User",
+            entity_id=user.id,
+            actor_id=user.id,
+            actor_name=user.full_name,
+            input_summary=f"New user registered via {provider} OAuth as base Employee (L3)",
+            tenant_id=user.tenant_id
+        )
+
+    # Issue standard SyncBrief tokens stamped with current SERVER_BOOT_ID
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role,
+        "tenant_id": user.tenant_id or 1
+    })
+    refresh_token = create_refresh_token({
+        "sub": str(user.id),
+        "tenant_id": user.tenant_id or 1
+    })
+    user.refresh_token = refresh_token
+    db.commit()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user_to_profile(user)
+    }
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):

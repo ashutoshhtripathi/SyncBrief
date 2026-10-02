@@ -179,3 +179,34 @@ def test_multi_tenant_boundary_isolation(client):
     cross_resp = client.get(f"/api/auth/users/{alice_id}", headers={"Authorization": f"Bearer {t1_token}"})
     assert cross_resp.status_code == 403
     assert "different organization" in cross_resp.json()["detail"].lower()
+
+def test_server_restart_invalidates_previous_session_tokens(client):
+    """Verify that restarting the application invalidates tokens minted under previous boot."""
+    import jwt
+    from backend.app.config import settings
+
+    # 1. Valid token from current boot
+    token = get_auth_token(client, "sarah.jenkins@syncbrief.ai")
+    valid_resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert valid_resp.status_code == 200
+    assert valid_resp.json()["email"] == "sarah.jenkins@syncbrief.ai"
+
+    # 2. Token from previous boot (different boot_id)
+    stale_token = jwt.encode(
+        {"sub": "1", "email": "sarah.jenkins@syncbrief.ai", "boot_id": "previous-server-boot-uuid"},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
+    )
+    stale_resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {stale_token}"})
+    assert stale_resp.status_code == 401
+    assert "Invalid or expired" in stale_resp.json()["detail"]
+
+    # 3. Token with missing boot_id (legacy tokens before restart fix)
+    legacy_token = jwt.encode(
+        {"sub": "1", "email": "sarah.jenkins@syncbrief.ai"},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
+    )
+    legacy_resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {legacy_token}"})
+    assert legacy_resp.status_code == 401
+    assert "Invalid or expired" in legacy_resp.json()["detail"]

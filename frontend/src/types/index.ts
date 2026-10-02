@@ -182,6 +182,7 @@ export interface SystemStatus {
   status: string;
   app_name: string;
   version: string;
+  boot_id?: string;
   ai_provider: string;
   is_mock: boolean;
   badge_label: string;
@@ -386,4 +387,24 @@ export interface PerformanceAppraisalEvidenceResponse {
   evidence_note: string;
   employees: PerformanceAppraisalEvidenceItem[];
   items?: PerformanceAppraisalEvidenceItem[];
+}
+
+export interface OAuthProviderConfig {
+  enabled: boolean;
+  client_id: string | null;
+  redirect_uri: string;
+  auth_endpoint: string;
+  tenant_id?: string | null;
+}
+
+export interface OAuthConfig {
+  google: OAuthProviderConfig;
+  microsoft: OAuthProviderConfig;
+}
+
+export interface OAuthCallbackPayload {
+  provider: 'google' | 'microsoft';
+  code: string;
+  redirect_uri: string;
+  code_verifier?: string;
 }

@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../../context/AuthContext';
 import { ThemeProvider } from '../../context/ThemeContext';
 import { ToastProvider } from '../../context/ToastContext';
 import { LoginPage } from '../LoginPage';
+import { OAuthCallbackPage } from '../OAuthCallbackPage';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { OrgHierarchyPage } from '../OrgHierarchyPage';
 import { CommandPalette } from '../../components/CommandPalette';
@@ -21,6 +22,15 @@ const mockLocalStorage = {
 };
 Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
 
+const sessionStore: Record<string, string> = {};
+const mockSessionStorage = {
+  getItem: (key: string) => sessionStore[key] || null,
+  setItem: (key: string, value: string) => { sessionStore[key] = value; },
+  removeItem: (key: string) => { delete sessionStore[key]; },
+  clear: () => { Object.keys(sessionStore).forEach(k => delete sessionStore[k]); }
+};
+Object.defineProperty(window, 'sessionStorage', { value: mockSessionStorage });
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false } },
 });
@@ -31,7 +41,7 @@ describe('Authentication & User Profile Flow', () => {
     vi.clearAllMocks();
   });
 
-  it('renders Login screen with corporate email, password, and quick-test accounts', () => {
+  it('renders Login screen with corporate email, password, and enterprise SSO buttons without test account selector', () => {
     render(
       <BrowserRouter>
         <ThemeProvider>
@@ -46,11 +56,16 @@ describe('Authentication & User Profile Flow', () => {
     expect(screen.getByPlaceholderText(/name@syncbrief.ai/i)).toBeDefined();
     expect(screen.getByPlaceholderText(/••••••••/i)).toBeDefined();
     expect(screen.getByRole('button', { name: /Sign In/i })).toBeDefined();
-    expect(screen.getByText(/Sarah Jenkins/i)).toBeDefined();
-    expect(screen.getByText(/Alice Smith/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Continue with Microsoft/i })).toBeDefined();
+
+    // Verify test accounts UI is removed
+    expect(screen.queryByText(/Select Account to Test/i)).toBeNull();
+    expect(screen.queryByText(/Sarah Jenkins/i)).toBeNull();
+    expect(screen.queryByText(/Alice Smith/i)).toBeNull();
   });
 
-  it('populates fields when a test account button is clicked', () => {
+  it('allows manual input of corporate credentials into login fields', () => {
     render(
       <BrowserRouter>
         <ThemeProvider>
@@ -61,12 +76,14 @@ describe('Authentication & User Profile Flow', () => {
       </BrowserRouter>
     );
 
-    const priyaButton = screen.getByText(/Priya Sharma/i).closest('button');
-    expect(priyaButton).toBeDefined();
-    fireEvent.click(priyaButton!);
-
     const emailInput = screen.getByPlaceholderText(/name@syncbrief.ai/i) as HTMLInputElement;
+    const passwordInput = screen.getByPlaceholderText(/••••••••/i) as HTMLInputElement;
+
+    fireEvent.change(emailInput, { target: { value: 'priya.sharma@syncbrief.ai' } });
+    fireEvent.change(passwordInput, { target: { value: 'securepassword123' } });
+
     expect(emailInput.value).toBe('priya.sharma@syncbrief.ai');
+    expect(passwordInput.value).toBe('securepassword123');
   });
 
   it('renders user profile dropdown in header without persona switcher, and executes Sign Out', async () => {
@@ -481,6 +498,11 @@ describe('Authentication & User Profile Flow', () => {
       </BrowserRouter>
     );
 
+    const emailInput = screen.getByPlaceholderText(/name@syncbrief.ai/i);
+    const passwordInput = screen.getByPlaceholderText(/••••••••/i);
+    fireEvent.change(emailInput, { target: { value: 'sarah.jenkins@syncbrief.ai' } });
+    fireEvent.change(passwordInput, { target: { value: 'wrongpassword' } });
+
     const submitBtn = screen.getByRole('button', { name: /Sign In/i });
     fireEvent.click(submitBtn);
 
@@ -488,5 +510,145 @@ describe('Authentication & User Profile Flow', () => {
       expect(screen.getByText(/Invalid credentials or tenant mismatch/i)).toBeDefined();
     });
   });
+
+  it('clears stale session and opens Login page when server rejects token after restart (401)', async () => {
+    mockLocalStorage.setItem('syncbrief_token', 'stale-token-from-previous-run');
+    mockLocalStorage.setItem('syncbrief_user', JSON.stringify({ full_name: 'Priya Sharma' }));
+
+    (globalThis as any).fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/auth/me')) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          json: () => Promise.resolve({ detail: 'Invalid or expired authentication token.' }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ app_name: 'SyncBrief AI' }),
+      });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ThemeProvider>
+            <AuthProvider>
+              <LoginPage />
+            </AuthProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(mockLocalStorage.getItem('syncbrief_token')).toBeNull();
+      expect(mockLocalStorage.getItem('syncbrief_user')).toBeNull();
+      expect(screen.getByRole('button', { name: /Sign In/i })).toBeDefined();
+    });
+  });
+
+  it('renders Continue with Google and Continue with Microsoft buttons on LoginPage', () => {
+    render(
+      <BrowserRouter>
+        <ThemeProvider>
+          <AuthProvider>
+            <LoginPage />
+          </AuthProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    );
+
+    expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Continue with Microsoft/i })).toBeDefined();
+    expect(screen.getByText(/or continue with/i)).toBeDefined();
+  });
+
+  it('displays configuration alert when Continue with Google is clicked without backend client ID configured', async () => {
+    (globalThis as any).fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/auth/oauth/start/google')) {
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          json: () => Promise.resolve({
+            detail: 'Google OAuth is not configured on this server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend environment.',
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(
+      <BrowserRouter>
+        <ThemeProvider>
+          <AuthProvider>
+            <LoginPage />
+          </AuthProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    );
+
+    const googleBtn = screen.getByRole('button', { name: /Continue with Google/i });
+    fireEvent.click(googleBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Google OAuth is not configured on this server/i)).toBeDefined();
+    });
+  });
+
+  it('OAuthCallbackPage successfully handles code exchange and sets up user session', async () => {
+    mockSessionStorage.setItem('syncbrief_oauth_state', 'expected-state-xyz');
+    mockSessionStorage.setItem('syncbrief_oauth_provider', 'google');
+
+    const mockOAuthUser = {
+      id: 99,
+      email: 'oauth.developer@syncbrief.ai',
+      full_name: 'OAuth Developer',
+      role: 'member' as const,
+      title: 'Software Engineer',
+      role_level: 3,
+      tenant_id: 1,
+      tenant_name: 'SyncBrief Enterprise',
+    };
+
+    (globalThis as any).fetch = vi.fn().mockImplementation((url: string, opts?: any) => {
+      if (url.includes('/api/auth/oauth/callback')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            access_token: 'valid-oauth-session-token',
+            refresh_token: 'valid-refresh-token',
+            token_type: 'bearer',
+            user: mockOAuthUser,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/auth/callback?code=mock-auth-code&state=expected-state-xyz']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <OAuthCallbackPage />
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    // Verifies loading state is rendered during processing
+    expect(screen.getByText(/Completing Google Identity Sign-In/i)).toBeDefined();
+
+    // Verifies storage updated with received token and user
+    await waitFor(() => {
+      expect(mockLocalStorage.getItem('syncbrief_token')).toBe('valid-oauth-session-token');
+      const savedUser = JSON.parse(mockLocalStorage.getItem('syncbrief_user') || '{}');
+      expect(savedUser.email).toBe('oauth.developer@syncbrief.ai');
+      // Verifies transient oauth state cleaned up
+      expect(mockSessionStorage.getItem('syncbrief_oauth_state')).toBeNull();
+    });
+  });
 });
+
+
 

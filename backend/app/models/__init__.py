@@ -38,6 +38,8 @@ class User(Base):
     
     # Security & Soft Delete
     refresh_token = Column(String(500), nullable=True)
+    auth_provider = Column(String(50), default="local")  # "local", "google", "microsoft"
+    auth_provider_id = Column(String(255), nullable=True)
     deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
