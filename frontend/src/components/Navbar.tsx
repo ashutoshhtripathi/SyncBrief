@@ -12,7 +12,8 @@ import {
   Moon, 
   HelpCircle, 
   Cpu, 
-  ArrowRightLeft,
+  LogOut,
+  Building2,
   Menu,
   X,
   Award,
@@ -24,8 +25,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { fetchSystemStatus, fetchAllUsers } from '../api';
-import { SystemStatus, User as UserType } from '../types';
+import { fetchSystemStatus } from '../api';
+import { SystemStatus } from '../types';
 
 interface NavbarProps {
   onStartTour: () => void;
@@ -38,37 +39,47 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCommandPalette,
   onOpenQuickAdd,
 }) => {
-  const { user, loginAs } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
-  const [availableUsers, setAvailableUsers] = useState<UserType[]>([]);
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
 
   useEffect(() => {
     fetchSystemStatus().then(setStatus).catch(() => {});
-    fetchAllUsers().then(setAvailableUsers).catch(() => {});
   }, []);
 
   // Close mobile menu on page change
   useEffect(() => {
     setMobileMenuOpen(false);
-    setIsRoleDropdownOpen(false);
+    setIsProfileDropdownOpen(false);
   }, [location.pathname]);
+
+  const isDirector =
+    user?.role === 'director' ||
+    user?.role === 'admin' ||
+    (user?.role_level !== undefined && user.role_level <= 1);
+
+  const isManager =
+    !isDirector &&
+    (user?.role === 'manager' ||
+      (user?.role_level !== undefined && user.role_level === 2));
 
   const navItems = [
     { label: 'Today', path: '/', icon: CalendarCheck, desc: "Team's daily standup hub" },
-    { label: 'Check-in', path: '/checkin', icon: Sparkles, desc: '60s async update with task link', badge: '60s' },
+    ...(!isDirector ? [{ label: 'Check-in', path: '/checkin', icon: Sparkles, desc: '60s async update with task link', badge: '60s' }] : []),
     { label: 'Sprints', path: '/sprints', icon: Kanban, desc: 'Sprint Kanban board & story points' },
     { label: 'Blockers', path: '/blockers', icon: Kanban, desc: 'AI blocker board & Azure DevOps' },
     { label: 'Digest', path: '/digest', icon: FileText, desc: 'AI summary & verifiable citations' },
-    { label: 'My Points', path: '/points', icon: Award, desc: 'Points earned & delivery velocity' },
-    { label: 'Appraisal', path: '/appraisal', icon: Users, desc: 'Subordinate team performance review' },
-    { label: 'Why SyncBrief', path: '/why-syncbrief', icon: Sparkles, desc: 'SyncBrief vs Jira & CSV import' },
-    { label: 'Org & Team', path: '/hierarchy', icon: Network, desc: 'Reporting structure & RBAC visibility' },
+    ...(!isDirector ? [{ label: 'My Points', path: '/points', icon: Award, desc: 'Points earned & delivery velocity' }] : []),
+    ...(isDirector || isManager ? [
+      { label: 'Appraisal', path: '/appraisal', icon: Users, desc: 'Subordinate team performance review' },
+      { label: 'Org & Team', path: '/hierarchy', icon: Network, desc: 'Reporting structure & team directory' },
+    ] : []),
     { label: 'Insights', path: '/insights', icon: BarChart3, desc: 'Velocity metrics & meeting time saved' },
-    { label: 'Teams Source', path: '/channels', icon: MessageSquare, desc: 'Opted-in channel evidence source' },
+    ...(isDirector ? [{ label: 'Teams Source', path: '/channels', icon: MessageSquare, desc: 'Opted-in channel evidence source' }] : []),
+    { label: 'Why SyncBrief', path: '/why-syncbrief', icon: Sparkles, desc: 'SyncBrief vs Jira & CSV import' },
     { label: 'Settings', path: '/settings', icon: Settings, desc: 'Channel opt-in & audit trail' },
   ];
 
@@ -183,7 +194,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </nav>
 
-        {/* Right Section: Command Palette, Quick Add, Persona Switcher, Avatar, Theme */}
+        {/* Right Section: Command Palette, Quick Add, User Profile Menu, Theme */}
         <div className="flex items-center gap-2">
           {/* Quick Command Palette Button */}
           {onOpenCommandPalette && (
@@ -215,66 +226,86 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Quick Persona Switcher Dropdown */}
+          {/* Authenticated User Profile Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-300 hover:border-blue-400 transition"
-              title="Switch demo persona to test hierarchy access"
+              onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+              className="flex items-center gap-2 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:border-blue-400 transition"
+              title="Account & Organization Profile"
             >
-              <ArrowRightLeft className="w-3.5 h-3.5 text-blue-500" />
-              <span className="font-bold hidden sm:inline">{user?.full_name?.split(' ')[0] || 'User'}</span>
-              <span className="font-mono text-[10px] px-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-bold">
-                L{user?.role_level || 5}
-              </span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <div className="relative shrink-0">
+                <img
+                  src={user?.avatar_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150'}
+                  alt={user?.full_name || 'User'}
+                  className="w-7 h-7 rounded-full object-cover ring-2 ring-blue-500/40"
+                />
+                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white dark:ring-slate-900" />
+              </div>
+              <div className="hidden sm:flex flex-col text-left">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">
+                  {user?.full_name || 'User'}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight truncate max-w-[120px]">
+                  {user?.tenant_name || 'SyncBrief Enterprise'}
+                </span>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </button>
 
-            {isRoleDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-2 z-50 animate-in fade-in space-y-1">
-                <div className="px-2.5 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Test Hierarchy Personas
+            {isProfileDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-3 z-50 animate-in fade-in space-y-3">
+                {/* User info summary */}
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <img
+                    src={user?.avatar_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150'}
+                    alt={user?.full_name || 'User'}
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-blue-500/40"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                      {user?.full_name}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {user?.email}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold uppercase">
+                        {user?.role}
+                      </span>
+                      {user?.role_level && (
+                        <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                          Level {user.role_level}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="max-h-60 overflow-y-auto space-y-1">
-                  {availableUsers.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        loginAs(u.role as any, u.id);
-                        setIsRoleDropdownOpen(false);
-                      }}
-                      className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between transition ${
-                        user?.id === u.id
-                          ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                      }`}
-                    >
-                      <div className="truncate">
-                        <div>{u.full_name}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">{u.title}</div>
-                      </div>
-                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 shrink-0">
-                        L{u.role_level}
-                      </span>
-                    </button>
-                  ))}
+                {/* Organization / Tenant info */}
+                <div className="px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-center gap-2.5 text-xs">
+                  <Building2 className="w-4 h-4 text-blue-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Organization</div>
+                    <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      {user?.tenant_name || 'SyncBrief Enterprise'}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Sign Out Button */}
+                <button
+                  onClick={() => {
+                    setIsProfileDropdownOpen(false);
+                    logout();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/60 transition"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign Out</span>
+                </button>
               </div>
             )}
           </div>
-
-          {/* User Avatar */}
-          {user && (
-            <div className="relative shrink-0">
-              <img
-                src={user.avatar_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150'}
-                alt={user.full_name}
-                className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-500/40 shadow-xs"
-              />
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
-            </div>
-          )}
 
           {/* Theme Toggle */}
           <button
@@ -321,20 +352,31 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {user && (
-            <div className="pt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <div className="pt-2 flex flex-col gap-2 text-xs text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-2">
                 <img
                   src={user.avatar_url || ''}
                   alt={user.full_name}
-                  className="w-7 h-7 rounded-full object-cover"
+                  className="w-8 h-8 rounded-full object-cover"
                 />
-                <div>
-                  <div className="font-bold text-slate-800 dark:text-slate-200">{user.full_name}</div>
-                  <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
-                    {user.title} (Level {user.role_level})
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-slate-800 dark:text-slate-200 truncate">{user.full_name}</div>
+                  <div className="text-[10px] text-slate-400 truncate">{user.email}</div>
+                  <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold truncate">
+                    {user.title} ({user.tenant_name || 'Organization'})
                   </div>
                 </div>
               </div>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  logout();
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/60 transition"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out</span>
+              </button>
             </div>
           )}
         </div>

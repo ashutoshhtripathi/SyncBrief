@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { demoLogin, getCurrentUser, loginWithCredentials } from '../api';
+import { getCurrentUser, loginWithCredentials } from '../api';
 
 interface AuthContextType {
   user: User | null;
@@ -34,33 +34,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async function initAuth() {
       try {
         const storage = typeof window !== 'undefined' ? window.localStorage : null;
-        const storedUser = storage?.getItem('syncbrief_user');
         const token = storage?.getItem('syncbrief_token');
-        if (storedUser && token) {
-          setUser(JSON.parse(storedUser));
+
+        if (token) {
+          try {
+            const currentUser = await getCurrentUser();
+            setUser(currentUser);
+            storage?.setItem('syncbrief_user', JSON.stringify(currentUser));
+          } catch {
+            // Token is invalid, expired, or rejected by backend (e.g. 401 Unauthorized)
+            storage?.removeItem('syncbrief_token');
+            storage?.removeItem('syncbrief_user');
+            setUser(null);
+          }
         } else {
-          // Auto-login as Sarah Jenkins (Manager / Director) for instant live demo experience
-          const res = await demoLogin('manager');
-          setUser(res.user);
+          setUser(null);
         }
       } catch (err) {
         console.error('Auth initialization error:', err);
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
     }
     initAuth();
   }, []);
-
-  const loginAs = async (role: 'manager' | 'member' | 'admin', userId?: number) => {
-    setIsLoading(true);
-    try {
-      const res = await demoLogin(role, userId);
-      setUser(res.user);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const loginWithEmail = async (email: string, password = 'demo1234') => {
     setIsLoading(true);
@@ -76,16 +74,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.removeItem('syncbrief_token');
       window.localStorage.removeItem('syncbrief_user');
+      window.localStorage.removeItem('syncbrief_refresh_token');
     }
     setUser(null);
   };
 
+  // Persona / role switching as a login bypass is strictly disabled
+  const loginAs = async (_role: 'manager' | 'member' | 'admin', _userId?: number) => {
+    console.warn('Persona/role switching is disabled in secure multi-tenant mode. Please authenticate using loginWithEmail.');
+  };
+
   const switchRole = async () => {
-    if (user?.role === 'manager' || user?.role === 'admin') {
-      await loginAs('member');
-    } else {
-      await loginAs('manager');
-    }
+    console.warn('Role switching bypass is disabled in secure multi-tenant mode. Please authenticate as the target user.');
   };
 
   return (

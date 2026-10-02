@@ -10,17 +10,24 @@ from backend.app.schemas import DigestResponse
 from backend.app.ai import get_ai_provider
 from backend.app.integrations.teams_cards import TeamsCardGenerator
 from backend.app.config import settings
+from backend.app.auth_deps import get_current_user
 
 router = APIRouter(prefix="/digest", tags=["Daily Digest"])
 
 @router.get("/today", response_model=DigestResponse)
-async def get_today_digest(db: Session = Depends(get_db)):
-    """Fetch today's executive standup digest, or synthesize if not present."""
+async def get_today_digest(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Fetch today's executive standup digest scoped to tenant, or synthesize if not present."""
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
-    digest = db.query(Digest).filter(Digest.date == today_str).order_by(Digest.id.desc()).first()
+    query = db.query(Digest).filter(Digest.date == today_str)
+    if current_user.tenant_id is not None:
+        query = query.filter(Digest.tenant_id == current_user.tenant_id)
+    digest = query.order_by(Digest.id.desc()).first()
 
     if not digest:
-        return await regenerate_digest(db)
+        return await regenerate_digest(current_user=current_user, db=db)
 
     return {
         "id": digest.id,
@@ -36,15 +43,27 @@ async def get_today_digest(db: Session = Depends(get_db)):
     }
 
 @router.post("/regenerate", response_model=DigestResponse)
-async def regenerate_digest(db: Session = Depends(get_db)):
-    """Re-synthesize the daily standup digest with the latest team updates and verified citations."""
+async def regenerate_digest(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Re-synthesize the daily standup digest with the latest tenant team updates and verified citations."""
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
     since = datetime.utcnow() - timedelta(hours=24)
 
-    # Gather data
-    checkins = db.query(Checkin).filter(Checkin.created_at >= since).all()
-    blockers = db.query(Blocker).filter(Blocker.status.in_(["open", "in_progress"])).all()
-    users = db.query(User).all()
+    # Gather data strictly filtered by tenant organization
+    checkin_query = db.query(Checkin).filter(Checkin.created_at >= since)
+    blocker_query = db.query(Blocker).filter(Blocker.status.in_(["open", "in_progress"]))
+    user_query = db.query(User).filter(User.deleted_at.is_(None))
+
+    if current_user.tenant_id is not None:
+        checkin_query = checkin_query.filter(Checkin.tenant_id == current_user.tenant_id)
+        blocker_query = blocker_query.filter(Blocker.tenant_id == current_user.tenant_id)
+        user_query = user_query.filter(User.tenant_id == current_user.tenant_id)
+
+    checkins = checkin_query.all()
+    blockers = blocker_query.all()
+    users = user_query.all()
 
     checkins_payload = [
         {
@@ -86,6 +105,7 @@ async def regenerate_digest(db: Session = Depends(get_db)):
     teams_card = TeamsCardGenerator.generate_digest_card(digest_res)
 
     digest = Digest(
+        tenant_id=current_user.tenant_id,
         date=today_str,
         progress_by_person_json=json.dumps(digest_res.get("progress_by_person", [])),
         blockers_summary_json=json.dumps(digest_res.get("blockers_summary", [])),
@@ -99,6 +119,9 @@ async def regenerate_digest(db: Session = Depends(get_db)):
 
     # Audit log
     audit = AuditLog(
+        tenant_id=current_user.tenant_id,
+        actor_id=current_user.id,
+        actor_name=current_user.full_name,
         action="digest_generation",
         model_used=ai_provider.name,
         prompt_version="digest_v1",
@@ -123,12 +146,18 @@ async def regenerate_digest(db: Session = Depends(get_db)):
     }
 
 @router.post("/post-to-teams")
-async def post_digest_to_teams(db: Session = Depends(get_db)):
-    """Post Adaptive Card standup digest to Microsoft Teams webhook or mock connector."""
+async def post_digest_to_teams(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Post Adaptive Card standup digest to Microsoft Teams webhook or mock connector for current tenant."""
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
-    digest = db.query(Digest).filter(Digest.date == today_str).order_by(Digest.id.desc()).first()
+    query = db.query(Digest).filter(Digest.date == today_str)
+    if current_user.tenant_id is not None:
+        query = query.filter(Digest.tenant_id == current_user.tenant_id)
+    digest = query.order_by(Digest.id.desc()).first()
     if not digest:
-        raise HTTPException(status_code=404, detail="Digest not generated yet")
+        raise HTTPException(status_code=404, detail="Digest not generated yet for current organization")
 
     card_json = json.loads(digest.teams_card_json) if digest.teams_card_json else {}
 
@@ -148,3 +177,4 @@ async def post_digest_to_teams(db: Session = Depends(get_db)):
         "message": "Teams Broadcast Simulated! In production, this posts directly into Microsoft Teams #standup channel.",
         "card": card_json
     }
+

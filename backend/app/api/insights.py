@@ -5,6 +5,8 @@ from typing import List, Dict, Any
 from backend.app.database import get_db
 from backend.app.models import User, Checkin, Blocker
 from backend.app.schemas import SavingsAssumption
+from backend.app.auth_deps import get_current_user
+from backend.app.hierarchy import get_accessible_user_ids
 
 router = APIRouter(prefix="/insights", tags=["Team Insights & Analytics"])
 
@@ -14,13 +16,33 @@ def get_team_insights(
     duration_min: int = 30,
     working_days: int = 22,
     hourly_rate: float = 75.0,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Returns engineering velocity metrics, transparent meeting savings calculator,
-    mood trends, and timezone presence.
+    mood trends, and timezone presence strictly scoped to current tenant and authorized hierarchy.
     """
-    total_users = db.query(User).count() or 6
+    user_query = db.query(User).filter(User.deleted_at.is_(None))
+    checkin_query = db.query(Checkin)
+    blocker_query = db.query(Blocker)
+
+    if current_user.tenant_id is not None:
+        user_query = user_query.filter(User.tenant_id == current_user.tenant_id)
+        checkin_query = checkin_query.filter(Checkin.tenant_id == current_user.tenant_id)
+        blocker_query = blocker_query.filter(Blocker.tenant_id == current_user.tenant_id)
+
+    # Scoped access for managers / team members
+    if current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1):
+        users = user_query.all()
+    else:
+        accessible_ids = get_accessible_user_ids(current_user, db)
+        users = user_query.filter(User.id.in_(accessible_ids)).all()
+        checkin_query = checkin_query.filter(Checkin.user_id.in_(accessible_ids))
+        accessible_names = {u.full_name for u in users}
+        blocker_query = blocker_query.filter(Blocker.owner_name.in_(accessible_names))
+
+    total_users = len(users) or 6
     effective_team_size = team_size if team_size > 0 else total_users
 
     # Calculate meeting savings transparently
@@ -30,15 +52,15 @@ def get_team_insights(
 
     # Check-in rate over past 7 days
     seven_days_ago = datetime.utcnow() - timedelta(days=7)
-    recent_checkins_count = db.query(Checkin).filter(Checkin.created_at >= seven_days_ago, Checkin.status == "submitted").count()
+    recent_checkins_count = checkin_query.filter(Checkin.created_at >= seven_days_ago, Checkin.status == "submitted").count()
     expected_checkins = effective_team_size * 5  # 5 working days in week
     checkin_rate = min(100.0, round((recent_checkins_count / max(1, expected_checkins)) * 100.0, 1))
     if checkin_rate < 50.0:
         checkin_rate = 88.5 # realistic default for demo
 
     # Blocker metrics
-    active_blockers = db.query(Blocker).filter(Blocker.status.in_(["open", "in_progress"])).count()
-    resolved_blockers = db.query(Blocker).filter(Blocker.status == "resolved").all()
+    active_blockers = blocker_query.filter(Blocker.status.in_(["open", "in_progress"])).count()
+    resolved_blockers = blocker_query.filter(Blocker.status == "resolved").all()
 
     avg_resolution_hours = 14.5
     if resolved_blockers:
@@ -53,25 +75,22 @@ def get_team_insights(
     for d in range(6, -1, -1):
         day_date = datetime.utcnow() - timedelta(days=d)
         day_str = day_date.strftime("%b %d")
-        # Avg mood
         start = day_date.replace(hour=0, minute=0, second=0)
         end = day_date.replace(hour=23, minute=59, second=59)
-        day_checkins = db.query(Checkin).filter(Checkin.created_at >= start, Checkin.created_at <= end).all()
+        day_checkins = checkin_query.filter(Checkin.created_at >= start, Checkin.created_at <= end).all()
         avg_mood = 4.2
         if day_checkins:
             avg_mood = round(sum(c.mood for c in day_checkins) / len(day_checkins), 1)
-        mood_trend.append({"date": day_str, "avg_mood": avg_mood, "checkin_count": max(4, len(day_checkins))})
+        mood_trend.append({"date": day_str, "avg_mood": avg_mood, "checkin_count": max(1, len(day_checkins))})
 
     # Severity distribution
-    sev_high = db.query(Blocker).filter(Blocker.severity == "high").count()
-    sev_med = db.query(Blocker).filter(Blocker.severity == "medium").count()
-    sev_low = db.query(Blocker).filter(Blocker.severity == "low").count()
+    sev_high = blocker_query.filter(Blocker.severity == "high").count()
+    sev_med = blocker_query.filter(Blocker.severity == "medium").count()
+    sev_low = blocker_query.filter(Blocker.severity == "low").count()
 
     # Timezone presence strip
-    users = db.query(User).all()
     timezone_strip = []
     for u in users:
-        # Approximate local hour based on timezone
         tz = u.timezone
         utc_now = datetime.utcnow()
         if "Kolkata" in tz:
@@ -127,3 +146,4 @@ def get_team_insights(
             "hourly_rate_usd": hourly_rate
         }
     }
+

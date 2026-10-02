@@ -3,8 +3,17 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from backend.app.database import get_db
-from backend.app.models import User, Checkin, Task
-from backend.app.schemas import LoginRequest, DemoLoginRequest, TokenResponse, UserProfile, UserCreate, UserUpdate, RefreshTokenRequest
+from backend.app.models import User, Checkin, Task, Tenant
+from backend.app.schemas import (
+    LoginRequest, 
+    DemoLoginRequest, 
+    TokenResponse, 
+    UserProfile, 
+    UserCreate, 
+    UserUpdate, 
+    RefreshTokenRequest,
+    TenantResponse
+)
 from backend.app.auth_utils import verify_password, create_access_token, create_refresh_token, decode_access_token, hash_password
 from backend.app.auth_deps import get_current_user
 from backend.app.hierarchy import can_view_user, enforce_hierarchy_access, get_subordinate_ids
@@ -25,11 +34,17 @@ def user_to_profile(u: User) -> Dict[str, Any]:
         "role_level": u.role_level or 5,
         "reports_to_id": u.reports_to_id,
         "org_type": u.org_type or "engineering",
-        "manager_name": u.manager.full_name if u.manager else None
+        "manager_name": u.manager.full_name if u.manager else None,
+        "tenant_id": u.tenant_id or 1,
+        "tenant_name": u.tenant.name if u.tenant else "SyncBrief Enterprise"
     }
 
 @router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
+    """
+    Authenticate user using verified Argon2id/bcrypt password hash.
+    Enforces real account authentication. Issues JWT bearer token enriched with tenant_id.
+    """
     user = db.query(User).filter(User.email == req.email.lower().strip(), User.deleted_at.is_(None)).first()
     if not user or not verify_password(req.password, user.hashed_password):
         raise HTTPException(
@@ -37,8 +52,16 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             detail="Incorrect email or password",
         )
     
-    access_token = create_access_token({"sub": str(user.id), "email": user.email, "role": user.role})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role,
+        "tenant_id": user.tenant_id or 1
+    })
+    refresh_token = create_refresh_token({
+        "sub": str(user.id),
+        "tenant_id": user.tenant_id or 1
+    })
     user.refresh_token = refresh_token
     db.commit()
 
@@ -50,32 +73,15 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/demo-login", response_model=TokenResponse)
-def demo_login(req: DemoLoginRequest, db: Session = Depends(get_db)):
-    """1-Click login for hackathon judges and demo presentations."""
-    if req.user_id:
-        user = db.query(User).filter(User.id == req.user_id, User.deleted_at.is_(None)).first()
-    elif req.role in ["director", "admin"]:
-        user = db.query(User).filter(User.role.in_(["director", "admin"]) | (User.role_level == 1), User.deleted_at.is_(None)).first() or db.query(User).filter(User.deleted_at.is_(None)).first()
-    elif req.role == "manager":
-        user = db.query(User).filter(User.role == "manager", User.deleted_at.is_(None)).first() or db.query(User).filter(User.role_level == 2, User.deleted_at.is_(None)).first()
-    else:
-        # Default employee: Priya Sharma (hero scenario engineer)
-        user = db.query(User).filter(User.full_name.ilike("%Priya%"), User.deleted_at.is_(None)).first() or db.query(User).filter(User.role.in_(["employee", "member"]), User.deleted_at.is_(None)).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="Demo user not found")
-
-    access_token = create_access_token({"sub": str(user.id), "email": user.email, "role": user.role})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
-    user.refresh_token = refresh_token
-    db.commit()
-
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "user": user_to_profile(user)
-    }
+def demo_login():
+    """
+    Disabled: 1-Click unauthenticated demo login has been removed.
+    All users must authenticate with valid credentials via /api/auth/login.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Demo 1-click login has been disabled in secure multi-tenant mode. Please authenticate via /api/auth/login with registered user credentials."
+    )
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
@@ -89,8 +95,16 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
     if not user or user.refresh_token != req.refresh_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked or invalid")
 
-    new_access_token = create_access_token({"sub": str(user.id), "email": user.email, "role": user.role})
-    new_refresh_token = create_refresh_token({"sub": str(user.id)})
+    new_access_token = create_access_token({
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role,
+        "tenant_id": user.tenant_id or 1
+    })
+    new_refresh_token = create_refresh_token({
+        "sub": str(user.id),
+        "tenant_id": user.tenant_id or 1
+    })
     user.refresh_token = new_refresh_token
     db.commit()
 
@@ -112,13 +126,28 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
 def get_current_profile(current_user: User = Depends(get_current_user)):
     return user_to_profile(current_user)
 
+@router.get("/tenant", response_model=TenantResponse)
+def get_current_tenant(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Return organization details for the authenticated user's tenant."""
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant organization not found")
+    return tenant
+
 @router.get("/users", response_model=List[UserProfile])
 def list_all_team_members(
     org_type: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """List all team members across timezones and hierarchies."""
-    query = db.query(User).filter(User.deleted_at.is_(None))
+    """List all team members within the authenticated user's tenant organization."""
+    query = db.query(User).filter(
+        User.deleted_at.is_(None),
+        User.tenant_id == current_user.tenant_id
+    )
     if org_type:
         query = query.filter(User.org_type == org_type)
     users = query.order_by(User.role_level.asc(), User.id.asc()).all()
@@ -133,7 +162,11 @@ def get_my_reports(
     sub_ids = get_subordinate_ids(current_user, db)
     if not sub_ids:
         return []
-    reports = db.query(User).filter(User.id.in_(sub_ids), User.deleted_at.is_(None)).order_by(User.role_level.asc()).all()
+    reports = db.query(User).filter(
+        User.id.in_(sub_ids),
+        User.tenant_id == current_user.tenant_id,
+        User.deleted_at.is_(None)
+    ).order_by(User.role_level.asc()).all()
     return [user_to_profile(u) for u in reports]
 
 @router.get("/users/{user_id}", response_model=UserProfile)
@@ -148,7 +181,11 @@ def get_user_by_id(
     Peers and superiors cannot be viewed.
     """
     enforce_hierarchy_access(current_user, user_id, db)
-    user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.tenant_id == current_user.tenant_id,
+        User.deleted_at.is_(None)
+    ).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user_to_profile(user)
@@ -156,10 +193,14 @@ def get_user_by_id(
 @router.get("/hierarchy")
 def get_org_hierarchy(
     org_type: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Returns the full organization hierarchy tree for chart rendering."""
-    query = db.query(User).filter(User.deleted_at.is_(None))
+    """Returns the organization hierarchy tree scoped strictly to the current user's tenant."""
+    query = db.query(User).filter(
+        User.deleted_at.is_(None),
+        User.tenant_id == current_user.tenant_id
+    )
     if org_type:
         query = query.filter(User.org_type == org_type)
     all_users = query.all()
@@ -238,6 +279,7 @@ def delete_my_account(
         entity_id=current_user.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
         new_values={"deleted_at": current_user.deleted_at.isoformat()}
     )
     db.commit()
@@ -257,9 +299,19 @@ def create_user(
     if current_user.role not in ["admin", "manager", "director"] and current_user.role_level > 2:
         raise HTTPException(status_code=403, detail="Only Managers or Directors can create new users")
 
-    existing = db.query(User).filter(User.email == req.email.lower().strip()).first()
+    existing = db.query(User).filter(User.email == req.email.lower().strip(), User.deleted_at.is_(None)).first()
     if existing:
         raise HTTPException(status_code=400, detail="User with this email already exists")
+
+    reports_to = req.reports_to_id or current_user.id
+    if reports_to:
+        mgr = db.query(User).filter(
+            User.id == reports_to,
+            User.tenant_id == current_user.tenant_id,
+            User.deleted_at.is_(None)
+        ).first()
+        if not mgr:
+            raise HTTPException(status_code=400, detail="Reporting manager not found in current organization")
 
     new_user = User(
         email=req.email.lower().strip(),
@@ -271,8 +323,9 @@ def create_user(
         timezone=req.timezone,
         reminder_time=req.reminder_time,
         role_level=req.role_level,
-        reports_to_id=req.reports_to_id or current_user.id,
+        reports_to_id=reports_to,
         org_type=req.org_type,
+        tenant_id=current_user.tenant_id,
         streak_count=1
     )
     db.add(new_user)
@@ -286,7 +339,8 @@ def create_user(
         entity_id=new_user.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
-        new_values={"email": new_user.email, "role": new_user.role, "role_level": new_user.role_level}
+        tenant_id=current_user.tenant_id,
+        new_values={"email": new_user.email, "role": new_user.role, "role_level": new_user.role_level, "tenant_id": new_user.tenant_id}
     )
     db.commit()
 
@@ -304,7 +358,11 @@ def update_user(
     if current_user.role not in ["admin", "manager", "director"] and current_user.role_level > 2 and current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Permission denied to edit user")
 
-    user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.tenant_id == current_user.tenant_id,
+        User.deleted_at.is_(None)
+    ).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -320,6 +378,13 @@ def update_user(
     if req.reports_to_id is not None:
         if req.reports_to_id == user.id:
             raise HTTPException(status_code=400, detail="User cannot report to themselves")
+        mgr = db.query(User).filter(
+            User.id == req.reports_to_id,
+            User.tenant_id == current_user.tenant_id,
+            User.deleted_at.is_(None)
+        ).first()
+        if not mgr:
+            raise HTTPException(status_code=400, detail="Reporting manager not found in current organization")
         user.reports_to_id = req.reports_to_id
     if req.org_type is not None: user.org_type = req.org_type
 
@@ -330,6 +395,7 @@ def update_user(
         entity_id=user.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
         old_values=old_vals,
         new_values={"full_name": user.full_name, "role": user.role, "role_level": user.role_level, "reports_to_id": user.reports_to_id}
     )
@@ -353,12 +419,19 @@ def delete_user(
     if current_user.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
-    user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.tenant_id == current_user.tenant_id,
+        User.deleted_at.is_(None)
+    ).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Reassign direct reports to the deleted user's manager
-    db.query(User).filter(User.reports_to_id == user_id).update({"reports_to_id": user.reports_to_id})
+    # Reassign direct reports within the tenant to the deleted user's manager
+    db.query(User).filter(
+        User.reports_to_id == user_id,
+        User.tenant_id == current_user.tenant_id
+    ).update({"reports_to_id": user.reports_to_id})
     user.deleted_at = datetime.utcnow()
     user.refresh_token = None
 
@@ -369,6 +442,7 @@ def delete_user(
         entity_id=user.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
         new_values={"deleted_at": user.deleted_at.isoformat(), "reassigned_reports_to": user.reports_to_id}
     )
 

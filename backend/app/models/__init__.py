@@ -4,6 +4,16 @@ from sqlalchemy import Column, Integer, String, Text, Boolean, Float, DateTime, 
 from sqlalchemy.orm import relationship
 from backend.app.database import Base
 
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    domain = Column(String(255), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    users = relationship("User", back_populates="tenant")
+
 class User(Base):
     __tablename__ = "users"
 
@@ -18,6 +28,9 @@ class User(Base):
     reminder_time = Column(String(20), default="09:30")
     streak_count = Column(Integer, default=3)
     
+    # Multi-tenancy
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, default=1, index=True)
+
     # Hierarchy & RBAC
     role_level = Column(Integer, default=5)  # 1 = Top (Director), 2 = Manager, 3 = Employee
     reports_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -28,6 +41,7 @@ class User(Base):
     deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    tenant = relationship("Tenant", back_populates="users")
     checkins = relationship("Checkin", back_populates="user", cascade="all, delete-orphan")
     manager = relationship("User", remote_side=[id], backref="direct_reports")
 
@@ -35,6 +49,7 @@ class Channel(Base):
     __tablename__ = "channels"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, default=1, index=True)
     name = Column(String(100), unique=True, index=True, nullable=False) # e.g. #backend
     description = Column(String(255), nullable=True)
     is_syncbrief_enabled = Column(Boolean, default=True) # Privacy flag: only read if enabled
@@ -62,6 +77,7 @@ class Sprint(Base):
     __tablename__ = "sprints"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, default=1, index=True)
     name = Column(String(100), nullable=False)  # e.g. "Sprint 42"
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=False)
@@ -76,6 +92,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, default=1, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, default="")
     assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -100,6 +117,7 @@ class Checkin(Base):
     __tablename__ = "checkins"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, default=1, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     user_name = Column(String(255), nullable=False)
     
@@ -154,6 +172,7 @@ class Blocker(Base):
     __tablename__ = "blockers"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, default=1, index=True)
     checkin_id = Column(Integer, ForeignKey("checkins.id"), nullable=True)
     summary = Column(Text, nullable=False)
     severity = Column(String(50), default="medium") # "low", "medium", "high"
@@ -185,6 +204,7 @@ class Digest(Base):
     __tablename__ = "digests"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, default=1, index=True)
     date = Column(String(50), index=True, nullable=False) # e.g. "2026-09-29"
     progress_by_person_json = Column(Text, default="[]")
     blockers_summary_json = Column(Text, default="[]")
@@ -199,6 +219,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, default=1, index=True)
     actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     actor_name = Column(String(255), nullable=True)
     action = Column(String(100), nullable=False) # e.g. "CREATE_TASK", "UPDATE_TASK", "STATUS_CHANGE", "CLOSE_SPRINT", "ROLE_CHANGE", "DIGEST_GENERATED"

@@ -18,12 +18,14 @@ def log_audit_event(
     input_message_ids: Optional[List[str]] = None,
     input_summary: Optional[str] = None,
     output_summary: Optional[str] = None,
+    tenant_id: Optional[int] = None,
 ) -> AuditLog:
     """
     Appends an immutable audit log entry.
     All data writes, role changes, and AI evaluations are recorded here.
     """
     entry = AuditLog(
+        tenant_id=tenant_id,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,

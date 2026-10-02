@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import csv
@@ -8,7 +8,14 @@ from backend.app.database import get_db
 from backend.app.models import User, Task, Checkin, Blocker, Sprint
 from backend.app.schemas import PointsSummaryResponse, AppraisalReportResponse, AppraisalEmployeeItem, TaskPointDetail
 from backend.app.auth_deps import get_current_user
-from backend.app.hierarchy import can_view_user, enforce_hierarchy_access, get_subordinate_ids, calculate_task_points
+from backend.app.hierarchy import (
+    can_view_user, 
+    enforce_hierarchy_access, 
+    get_subordinate_ids, 
+    calculate_task_points,
+    get_accessible_user_ids,
+    enforce_tenant_access
+)
 
 router = APIRouter(prefix="/points", tags=["Points & Quarterly Appraisal"])
 
@@ -16,7 +23,10 @@ CARRY_OVER_PENALTY_DEFAULT = 25.0
 FORMULA_EXPLANATION = "Points = max(0, difficulty × (1 - (penalty_pct / 100) × carried_over_count)). 25% deducted per carry-over."
 
 def build_user_points_summary(user: User, db: Session, penalty_pct: float = CARRY_OVER_PENALTY_DEFAULT) -> dict:
-    tasks = db.query(Task).filter(Task.assignee_id == user.id, Task.deleted_at.is_(None)).all()
+    task_query = db.query(Task).filter(Task.assignee_id == user.id, Task.deleted_at.is_(None))
+    if user.tenant_id is not None:
+        task_query = task_query.filter(Task.tenant_id == user.tenant_id)
+    tasks = task_query.all()
     
     total_points = 0.0
     completed_on_time = 0
@@ -56,12 +66,18 @@ def build_user_points_summary(user: User, db: Session, penalty_pct: float = CARR
 
     # Check-ins & Consistency
     ninety_days_ago = datetime.utcnow() - timedelta(days=90)
-    checkins_count = db.query(Checkin).filter(Checkin.user_id == user.id, Checkin.created_at >= ninety_days_ago).count()
+    checkin_query = db.query(Checkin).filter(Checkin.user_id == user.id, Checkin.created_at >= ninety_days_ago)
+    if user.tenant_id is not None:
+        checkin_query = checkin_query.filter(Checkin.tenant_id == user.tenant_id)
+    checkins_count = checkin_query.count()
     expected_work_days = 65 # approx 21.6 days/month * 3
     consistency_pct = min(100.0, round((checkins_count / expected_work_days) * 100.0, 1))
 
     # Blockers
-    blockers_resolved = db.query(Blocker).filter(Blocker.owner_name == user.full_name, Blocker.status == "resolved").count()
+    blocker_query = db.query(Blocker).filter(Blocker.owner_name == user.full_name, Blocker.status == "resolved")
+    if user.tenant_id is not None:
+        blocker_query = blocker_query.filter(Blocker.tenant_id == user.tenant_id)
+    blockers_resolved = blocker_query.count()
 
     points_per_sprint = [{"sprint": s, "points": round(pts, 1)} for s, pts in sprint_points_map.items()]
 
@@ -103,9 +119,12 @@ def get_user_points(
     or not in the user's reporting tree!
     """
     enforce_hierarchy_access(current_user, user_id, db)
-    target_user = db.query(User).filter(User.id == user_id).first()
+    target_user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
+    if current_user.tenant_id is not None and target_user.tenant_id is not None and current_user.tenant_id != target_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Cannot view points of user from a different organization")
+
     return build_user_points_summary(target_user, db)
 
 @router.get("/recompute/{user_id}")
@@ -124,11 +143,16 @@ def recompute_user_points(
     target_user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
+    if current_user.tenant_id is not None and target_user.tenant_id is not None and current_user.tenant_id != target_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Cannot recompute points of user from a different organization")
 
-    tasks = db.query(Task).filter(
+    task_query = db.query(Task).filter(
         Task.assignee_id == user_id,
         Task.deleted_at.is_(None)
-    ).all()
+    )
+    if current_user.tenant_id is not None:
+        task_query = task_query.filter(Task.tenant_id == current_user.tenant_id)
+    tasks = task_query.all()
 
     breakdown = []
     total_recomputed = 0.0
@@ -174,20 +198,33 @@ def get_team_appraisal(
     db: Session = Depends(get_db)
 ):
     """
-    Quarterly appraisal dashboard for managers.
-    BACKEND ENFORCED: Returns appraisal items ONLY for employees reporting to current_user
-    (or all users if current_user is top-level/admin).
+    Quarterly appraisal dashboard for managers and directors.
+    BACKEND ENFORCED:
+    - Employees without reports cannot access appraisal reports (403 Forbidden).
+    - Managers see appraisal items ONLY for employees in their reporting tree.
+    - Directors see appraisal items for everyone in their tenant organization.
     """
     sub_ids = get_subordinate_ids(current_user, db)
-    
-    # If user is top-level (level 1 or admin), they can see the whole team
-    if current_user.role_level == 1 or current_user.role == "admin":
-        employees = db.query(User).filter(User.id != current_user.id).order_by(User.role_level.asc()).all()
-    elif sub_ids:
-        employees = db.query(User).filter(User.id.in_(sub_ids)).order_by(User.role_level.asc()).all()
+    is_director_or_admin = (
+        current_user.role in ["admin", "director"] or 
+        (current_user.role_level is not None and current_user.role_level <= 1)
+    )
+
+    if not is_director_or_admin and not sub_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only managers and directors can access team appraisal reports."
+        )
+
+    # Scoped employees within the tenant
+    user_query = db.query(User).filter(User.deleted_at.is_(None))
+    if current_user.tenant_id is not None:
+        user_query = user_query.filter(User.tenant_id == current_user.tenant_id)
+
+    if is_director_or_admin:
+        employees = user_query.filter(User.id != current_user.id).order_by(User.role_level.asc()).all()
     else:
-        # Not a manager / no reports
-        employees = []
+        employees = user_query.filter(User.id.in_(sub_ids)).order_by(User.role_level.asc()).all()
 
     employee_items = []
     for emp in employees:
@@ -212,8 +249,11 @@ def get_team_appraisal(
             score = 2.8
             rating = "Needs Focus / Blocked"
 
-        blockers_raised = db.query(Blocker).filter(Blocker.owner_name == emp.full_name).count()
-        blockers_resolved = db.query(Blocker).filter(Blocker.owner_name == emp.full_name, Blocker.status == "resolved").count()
+        blocker_base = db.query(Blocker).filter(Blocker.owner_name == emp.full_name)
+        if current_user.tenant_id is not None:
+            blocker_base = blocker_base.filter(Blocker.tenant_id == current_user.tenant_id)
+        blockers_raised = blocker_base.count()
+        blockers_resolved = blocker_base.filter(Blocker.status == "resolved").count()
 
         employee_items.append({
             "user_id": emp.id,
@@ -275,3 +315,4 @@ def export_appraisal_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=SyncBrief-Appraisal-{datetime.utcnow().strftime('%Y-%m-%d')}.csv"}
     )
+

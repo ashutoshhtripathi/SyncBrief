@@ -20,30 +20,56 @@ def test_health_and_status():
     assert data["app_name"] == "SyncBrief AI"
     assert "ai_provider" in data
 
-def test_demo_login():
+def test_demo_login_is_disabled():
+    """Verify that demo-login is permanently disabled and returns 403 Forbidden."""
     resp = client.post("/api/auth/demo-login", json={"role": "manager"})
-    assert resp.status_code == 200
-    data = resp.json()
+    assert resp.status_code == 403
+    assert "disabled" in resp.json()["detail"].lower()
+
+def test_real_authentication_and_tenant():
+    """Verify real email/password authentication and tenant isolation."""
+    # Invalid password -> 401
+    bad_resp = client.post("/api/auth/login", json={"email": "sarah.jenkins@syncbrief.ai", "password": "wrong"})
+    assert bad_resp.status_code == 401
+
+    # Valid login -> 200 with tokens and tenant info
+    login_resp = client.post("/api/auth/login", json={"email": "sarah.jenkins@syncbrief.ai", "password": "demo1234"})
+    assert login_resp.status_code == 200
+    data = login_resp.json()
     assert "access_token" in data
-    assert data["user"]["role"] == "manager"
+    assert "refresh_token" in data
+    assert data["user"]["role"] == "director"
+    assert data["user"]["tenant_id"] == 1
+    assert data["user"]["tenant_name"] == "SyncBrief Enterprise"
 
-    resp = client.post("/api/auth/demo-login", json={"role": "member"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["user"]["role"] in ["employee", "member"]
+    # Protected endpoint requires token
+    token = data["access_token"]
+    unauth_resp = client.get("/api/auth/users")
+    assert unauth_resp.status_code == 401
 
-    resp = client.post("/api/auth/demo-login", json={"role": "director"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["user"]["role"] in ["director", "admin"]
+    auth_resp = client.get("/api/auth/users", headers={"Authorization": f"Bearer {token}"})
+    assert auth_resp.status_code == 200
+    users = auth_resp.json()
+    assert len(users) > 0
+    assert all(u["tenant_id"] == 1 for u in users)
+
+def get_auth_headers(email: str = "sarah.jenkins@syncbrief.ai") -> dict:
+    login_resp = client.post("/api/auth/login", json={"email": email, "password": "demo1234"})
+    assert login_resp.status_code == 200
+    token = login_resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 def test_get_checkins_and_blockers():
-    resp = client.get("/api/checkins")
+    headers = get_auth_headers()
+    # Unauthenticated should fail with 401
+    assert client.get("/api/checkins").status_code == 401
+
+    resp = client.get("/api/checkins", headers=headers)
     assert resp.status_code == 200
     checkins = resp.json()
     assert len(checkins) > 0
 
-    resp = client.get("/api/blockers")
+    resp = client.get("/api/blockers", headers=headers)
     assert resp.status_code == 200
     blockers = resp.json()
     assert len(blockers) > 0
@@ -55,20 +81,22 @@ def test_get_checkins_and_blockers():
     assert hero["citations"][0]["status"] == "VERIFIED"
 
 def test_update_blocker_status():
-    resp = client.get("/api/blockers")
+    headers = get_auth_headers()
+    resp = client.get("/api/blockers", headers=headers)
     blockers = resp.json()
     target_id = blockers[0]["id"]
 
-    patch_resp = client.patch(f"/api/blockers/{target_id}/status", json={"status": "in_progress"})
+    patch_resp = client.patch(f"/api/blockers/{target_id}/status", json={"status": "in_progress"}, headers=headers)
     assert patch_resp.status_code == 200
     assert patch_resp.json()["status"] == "in_progress"
 
 def test_azure_devops_work_item_creation():
-    resp = client.get("/api/blockers")
+    headers = get_auth_headers()
+    resp = client.get("/api/blockers", headers=headers)
     blockers = resp.json()
     target_id = blockers[0]["id"]
 
-    ado_resp = client.post(f"/api/blockers/{target_id}/devops", json={"title": "Test Blocker Task"})
+    ado_resp = client.post(f"/api/blockers/{target_id}/devops", json={"title": "Test Blocker Task"}, headers=headers)
     assert ado_resp.status_code == 200
     data = ado_resp.json()
     assert "ADO-" in data["id"]

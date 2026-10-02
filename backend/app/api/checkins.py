@@ -8,7 +8,7 @@ from backend.app.models import Checkin, Blocker, Message, Channel, User, AuditLo
 from backend.app.schemas import CheckinCreate, CheckinResponse, BlockerResponse
 from backend.app.auth_deps import get_current_user
 from backend.app.ai import get_ai_provider, CitationValidator
-from backend.app.hierarchy import enforce_hierarchy_access
+from backend.app.hierarchy import enforce_hierarchy_access, get_accessible_user_ids, enforce_tenant_access
 
 router = APIRouter(prefix="/checkins", tags=["Check-ins"])
 
@@ -61,6 +61,7 @@ async def submit_checkin(
     """
     Submit a task-based 60-second standup check-in.
     Updates task progress, triggers AI blocker detection with verifiable citations.
+    Enforces tenant isolation and task authorization.
     """
     # 1. Update streak
     current_user.streak_count = (current_user.streak_count or 0) + 1
@@ -70,16 +71,25 @@ async def submit_checkin(
     task_title = req.task_title
     task = None
     if req.task_id:
-        task = db.query(Task).filter(Task.id == req.task_id).first()
-        if task:
-            task_title = task.title
-            if req.progress_pct is not None:
-                task.progress_pct = req.progress_pct
-                if req.progress_pct >= 100:
-                    task.status = "Done"
-                    task.completed_at = datetime.utcnow()
-                elif task.status == "To do" and req.progress_pct > 0:
-                    task.status = "In progress"
+        task_query = db.query(Task).filter(Task.id == req.task_id, Task.deleted_at.is_(None))
+        if current_user.tenant_id is not None:
+            task_query = task_query.filter(Task.tenant_id == current_user.tenant_id)
+        task = task_query.first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found in current organization")
+        
+        # If task assigned to another user, verify hierarchy permission
+        if task.assignee_id and task.assignee_id != current_user.id:
+            enforce_hierarchy_access(current_user, task.assignee_id, db)
+
+        task_title = task.title
+        if req.progress_pct is not None:
+            task.progress_pct = req.progress_pct
+            if req.progress_pct >= 100:
+                task.status = "Done"
+                task.completed_at = datetime.utcnow()
+            elif task.status == "To do" and req.progress_pct > 0:
+                task.status = "In progress"
 
     # Smart textual fallbacks
     yesterday_text = req.yesterday or ""
@@ -100,8 +110,9 @@ async def submit_checkin(
         else:
             today_text = "Continuing scheduled sprint tasks."
 
-    # 3. Create Checkin record
+    # 3. Create Checkin record scoped to tenant
     checkin = Checkin(
+        tenant_id=current_user.tenant_id,
         user_id=current_user.id,
         user_name=current_user.full_name,
         task_id=req.task_id,
@@ -132,8 +143,11 @@ async def submit_checkin(
         if task and task.status != "Done":
             task.status = "Blocked"
 
-        # Fetch messages ONLY from opted-in channels (Privacy First!)
-        opted_in_channels = db.query(Channel).filter(Channel.is_syncbrief_enabled == True).all()
+        # Fetch messages ONLY from opted-in channels in this tenant
+        channel_query = db.query(Channel).filter(Channel.is_syncbrief_enabled == True)
+        if current_user.tenant_id is not None:
+            channel_query = channel_query.filter(Channel.tenant_id == current_user.tenant_id)
+        opted_in_channels = channel_query.all()
         channel_ids = [c.id for c in opted_in_channels]
         
         recent_messages = db.query(Message).filter(Message.channel_id.in_(channel_ids)).order_by(Message.timestamp.desc()).limit(80).all()
@@ -167,6 +181,7 @@ async def submit_checkin(
             validated_citations = CitationValidator.validate_citations(raw_citations, db)
 
             blocker_model = Blocker(
+                tenant_id=current_user.tenant_id,
                 checkin_id=checkin.id,
                 summary=b_data.get("blocker_summary", req.blockers_text),
                 severity=b_data.get("severity", "medium"),
@@ -196,6 +211,9 @@ async def submit_checkin(
 
         # Audit Log Entry
         audit = AuditLog(
+            tenant_id=current_user.tenant_id,
+            actor_id=current_user.id,
+            actor_name=current_user.full_name,
             action="blocker_extraction",
             model_used=ai_provider.name,
             prompt_version="blocker_v1",
@@ -219,25 +237,40 @@ def get_checkins(
 ):
     """
     Retrieve team check-in history.
-    ENFORCES HIERARCHY ACCESS:
-    If user_id is requested and is not current_user, verifies current_user can view user_id.
-    Peers cannot view another peer's check-ins (403 Forbidden).
+    ENFORCES HIERARCHY ACCESS & TENANT ISOLATION:
+    - If user_id is requested, strictly verifies current_user can view user_id (403 if unauthorized).
+    - If user_id is not specified:
+      * Employee sees only their own check-ins.
+      * Manager sees check-ins for themselves and their subordinate reporting tree.
+      * Director sees check-ins across their subordinate hierarchy / organization.
     """
+    query = db.query(Checkin)
+    if current_user.tenant_id is not None:
+        query = query.filter(Checkin.tenant_id == current_user.tenant_id)
+
     if user_id is not None:
         enforce_hierarchy_access(current_user, user_id, db)
-
-    query = db.query(Checkin).order_by(Checkin.created_at.desc())
-    if user_id:
         query = query.filter(Checkin.user_id == user_id)
-    checkins = query.limit(limit).all()
+    else:
+        accessible_ids = get_accessible_user_ids(current_user, db)
+        query = query.filter(Checkin.user_id.in_(accessible_ids))
 
+    checkins = query.order_by(Checkin.created_at.desc()).limit(limit).all()
     return [checkin_to_response(c) for c in checkins]
 
 @router.get("/today", response_model=List[CheckinResponse])
-def get_today_checkins(db: Session = Depends(get_db)):
-    """Fetch all check-ins submitted in the last 24 hours."""
+def get_today_checkins(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Fetch check-ins submitted in the last 24 hours scoped to tenant and user hierarchy."""
     since = datetime.utcnow() - timedelta(hours=24)
-    checkins = db.query(Checkin).filter(Checkin.created_at >= since).order_by(Checkin.created_at.desc()).all()
+    query = db.query(Checkin).filter(Checkin.created_at >= since)
+    if current_user.tenant_id is not None:
+        query = query.filter(Checkin.tenant_id == current_user.tenant_id)
+    accessible_ids = get_accessible_user_ids(current_user, db)
+    query = query.filter(Checkin.user_id.in_(accessible_ids))
+    checkins = query.order_by(Checkin.created_at.desc()).all()
     return [checkin_to_response(c) for c in checkins]
 
 @router.get("/last-task")
@@ -246,7 +279,10 @@ def get_user_last_checkin_task(
     db: Session = Depends(get_db)
 ):
     """Returns previous task from user's last check-in for smart pre-fill (<60s check-in)."""
-    last_checkin = db.query(Checkin).filter(Checkin.user_id == current_user.id).order_by(Checkin.id.desc()).first()
+    query = db.query(Checkin).filter(Checkin.user_id == current_user.id)
+    if current_user.tenant_id is not None:
+        query = query.filter(Checkin.tenant_id == current_user.tenant_id)
+    last_checkin = query.order_by(Checkin.id.desc()).first()
     if last_checkin and last_checkin.task_id:
         return {
             "task_id": last_checkin.task_id,
@@ -255,3 +291,4 @@ def get_user_last_checkin_task(
             "next_steps": last_checkin.next_steps or ""
         }
     return None
+

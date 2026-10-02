@@ -47,6 +47,8 @@ def get_audit_logs(
     - Employees see only audit logs where they were actor or subject.
     """
     query = db.query(AuditLog)
+    if current_user.tenant_id is not None:
+        query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
 
     if current_user.role_level > 1 and current_user.role not in ["director", "admin"]:
         subordinate_ids = get_subordinate_ids(current_user, db)

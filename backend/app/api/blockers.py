@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 import json
 from typing import List, Optional
 from datetime import datetime
 from backend.app.database import get_db
-from backend.app.models import Blocker, AuditLog
+from backend.app.models import Blocker, AuditLog, User, Checkin
 from backend.app.schemas import BlockerResponse, BlockerStatusUpdate, CreateDevOpsWorkItemRequest
 from backend.app.integrations.azure_devops import devops_client
 from backend.app.ai.validator import CitationValidator
+from backend.app.auth_deps import get_current_user
+from backend.app.hierarchy import get_accessible_user_ids, enforce_tenant_access
 
 router = APIRouter(prefix="/blockers", tags=["Blockers"])
 
@@ -15,16 +17,39 @@ router = APIRouter(prefix="/blockers", tags=["Blockers"])
 def get_all_blockers(
     status: Optional[str] = None,
     severity: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Retrieve all blockers for the Kanban Blocker Board and Digest."""
-    query = db.query(Blocker).order_by(Blocker.created_at.desc())
+    """
+    Retrieve blockers for the Kanban Blocker Board and Digest.
+    Enforces tenant isolation and reporting hierarchy access control.
+    """
+    query = db.query(Blocker)
+    if current_user.tenant_id is not None:
+        query = query.filter(Blocker.tenant_id == current_user.tenant_id)
+
+    # Scoped access based on hierarchy level
+    if current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1):
+        pass  # Director sees all blockers in the tenant
+    else:
+        accessible_ids = get_accessible_user_ids(current_user, db)
+        accessible_users = db.query(User.full_name).filter(User.id.in_(accessible_ids)).all()
+        accessible_names = {u[0] for u in accessible_users}
+
+        accessible_checkin_ids = db.query(Checkin.id).filter(Checkin.user_id.in_(accessible_ids)).all()
+        checkin_id_set = {c[0] for c in accessible_checkin_ids}
+
+        query = query.filter(
+            (Blocker.owner_name.in_(accessible_names)) | 
+            (Blocker.checkin_id.in_(checkin_id_set))
+        )
+
     if status:
         query = query.filter(Blocker.status == status)
     if severity:
         query = query.filter(Blocker.severity == severity)
     
-    blockers = query.all()
+    blockers = query.order_by(Blocker.created_at.desc()).all()
     return [
         {
             "id": b.id,
@@ -49,12 +74,29 @@ def get_all_blockers(
 def update_blocker_status(
     blocker_id: int,
     req: BlockerStatusUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update blocker status (open -> in_progress -> resolved) via Kanban drag and drop."""
     blocker = db.query(Blocker).filter(Blocker.id == blocker_id).first()
     if not blocker:
         raise HTTPException(status_code=404, detail="Blocker not found")
+
+    if current_user.tenant_id is not None and blocker.tenant_id is not None and current_user.tenant_id != blocker.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Blocker belongs to a different organization")
+
+    # Hierarchy access check
+    if current_user.role not in ["admin", "director"] and (current_user.role_level is None or current_user.role_level > 1):
+        accessible_ids = get_accessible_user_ids(current_user, db)
+        accessible_users = db.query(User.full_name).filter(User.id.in_(accessible_ids)).all()
+        accessible_names = {u[0] for u in accessible_users}
+        if blocker.owner_name not in accessible_names:
+            if blocker.checkin_id:
+                checkin = db.query(Checkin).filter(Checkin.id == blocker.checkin_id).first()
+                if not checkin or checkin.user_id not in accessible_ids:
+                    raise HTTPException(status_code=403, detail="Forbidden: Cannot modify blockers outside your reporting hierarchy")
+            else:
+                raise HTTPException(status_code=403, detail="Forbidden: Cannot modify blockers outside your reporting hierarchy")
 
     valid_statuses = ["open", "in_progress", "resolved"]
     if req.status not in valid_statuses:
@@ -74,6 +116,7 @@ def update_blocker_status(
 async def sync_to_azure_devops(
     blocker_id: int,
     req: CreateDevOpsWorkItemRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -83,6 +126,16 @@ async def sync_to_azure_devops(
     blocker = db.query(Blocker).filter(Blocker.id == blocker_id).first()
     if not blocker:
         raise HTTPException(status_code=404, detail="Blocker not found")
+
+    if current_user.tenant_id is not None and blocker.tenant_id is not None and current_user.tenant_id != blocker.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Blocker belongs to a different organization")
+
+    if current_user.role not in ["admin", "director"] and (current_user.role_level is None or current_user.role_level > 1):
+        accessible_ids = get_accessible_user_ids(current_user, db)
+        accessible_users = db.query(User.full_name).filter(User.id.in_(accessible_ids)).all()
+        accessible_names = {u[0] for u in accessible_users}
+        if blocker.owner_name not in accessible_names:
+            raise HTTPException(status_code=403, detail="Forbidden: Cannot export blockers outside your reporting hierarchy")
 
     title = req.title or blocker.summary
     description = req.description or f"Blocker identified by SyncBrief AI from {blocker.owner_name}. Blocked by: {blocker.blocked_by}."
@@ -104,7 +157,10 @@ async def sync_to_azure_devops(
     return devops_res
 
 @router.post("/test-hallucination")
-def test_hallucination_detection(db: Session = Depends(get_db)):
+def test_hallucination_detection(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Judge & demo tool: Injects a deliberate hallucinated citation test case
     and runs the strict CitationValidator to demonstrate rejection.
@@ -115,10 +171,11 @@ def test_hallucination_detection(db: Session = Depends(get_db)):
     validated_citations = CitationValidator.validate_citations(demo_data["citations"], db)
     
     blocker = Blocker(
+        tenant_id=current_user.tenant_id,
         summary=demo_data["summary"],
         severity=demo_data["severity"],
         status="open",
-        owner_name=demo_data["owner"],
+        owner_name=current_user.full_name,
         blocked_by=demo_data["blocked_by"],
         related_work_item=demo_data["related_work_item"],
         confidence=demo_data["confidence"],
@@ -133,3 +190,4 @@ def test_hallucination_detection(db: Session = Depends(get_db)):
         "blocker_id": blocker.id,
         "citations": validated_citations
     }
+

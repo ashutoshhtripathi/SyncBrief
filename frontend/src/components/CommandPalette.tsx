@@ -17,7 +17,7 @@ import {
   Moon, 
   HelpCircle, 
   ArrowRight,
-  UserCheck,
+  LogOut,
   Zap,
   CornerDownLeft,
   X
@@ -25,8 +25,6 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
-import { fetchAllUsers } from '../api';
-import { User } from '../types';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -37,7 +35,7 @@ interface CommandPaletteProps {
 
 interface CommandItem {
   id: string;
-  category: 'Navigation' | 'Actions' | 'Switch Persona';
+  category: 'Navigation' | 'Actions';
   title: string;
   subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -52,18 +50,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onStartTour,
 }) => {
   const navigate = useNavigate();
-  const { user, loginAs } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const toast = useToast();
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [usersList, setUsersList] = useState<User[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetchAllUsers().then(setUsersList).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -74,6 +67,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       }, 50);
     }
   }, [isOpen]);
+
+  const isManagerOrDirector =
+    user?.role === 'manager' ||
+    user?.role === 'director' ||
+    user?.role === 'admin' ||
+    (user?.role_level !== undefined && user.role_level <= 2);
+
+  const isDirector =
+    user?.role === 'director' ||
+    user?.role === 'admin' ||
+    (user?.role_level !== undefined && user.role_level <= 1);
 
   const navigationCommands: CommandItem[] = [
     {
@@ -130,18 +134,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       action: () => { navigate('/points'); onClose(); },
       shortcut: 'G P',
     },
-    {
+    ...(isManagerOrDirector ? [{
       id: 'nav-appraisal',
-      category: 'Navigation',
+      category: 'Navigation' as const,
       title: 'Team Performance Appraisal',
       subtitle: 'Subordinate review matrix with PDF & CSV export',
       icon: Users,
       action: () => { navigate('/appraisal'); onClose(); },
       shortcut: 'G A',
-    },
+    }] : []),
     {
       id: 'nav-why',
-      category: 'Navigation',
+      category: 'Navigation' as const,
       title: 'Why SyncBrief (vs Jira)',
       subtitle: 'Honest comparison, 60s standups & Jira CSV import',
       icon: Sparkles,
@@ -149,31 +153,31 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     },
     {
       id: 'nav-org',
-      category: 'Navigation',
-      title: 'Org Hierarchy & Permissions',
-      subtitle: 'Reporting structure & backend 403 sandbox',
+      category: 'Navigation' as const,
+      title: 'Org Hierarchy & Directory',
+      subtitle: 'Reporting structure & team directory',
       icon: Network,
       action: () => { navigate('/hierarchy'); onClose(); },
     },
     {
       id: 'nav-insights',
-      category: 'Navigation',
+      category: 'Navigation' as const,
       title: 'Insights & Time Saved',
       subtitle: 'Engineering meeting time reclaimed calculation',
       icon: BarChart3,
       action: () => { navigate('/insights'); onClose(); },
     },
-    {
+    ...(isDirector ? [{
       id: 'nav-channels',
-      category: 'Navigation',
+      category: 'Navigation' as const,
       title: 'Teams Channel Simulator',
       subtitle: 'Opted-in raw chat messages and evidence source',
       icon: MessageSquare,
       action: () => { navigate('/channels'); onClose(); },
-    },
+    }] : []),
     {
       id: 'nav-settings',
-      category: 'Navigation',
+      category: 'Navigation' as const,
       title: 'Settings & Channel Opt-in',
       subtitle: 'Privacy boundary controls and audit log',
       icon: Settings,
@@ -217,22 +221,21 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         onStartTour();
       },
     },
+    {
+      id: 'action-signout',
+      category: 'Actions',
+      title: 'Sign Out',
+      subtitle: `Sign out of ${user?.tenant_name || 'organization'} (${user?.email})`,
+      icon: LogOut,
+      action: () => {
+        onClose();
+        logout();
+        toast.info('Signed out successfully');
+      },
+    },
   ];
 
-  const personaCommands: CommandItem[] = usersList.map((u) => ({
-    id: `persona-${u.id}`,
-    category: 'Switch Persona',
-    title: `${u.full_name}`,
-    subtitle: `${u.title} • L${u.role_level} (${u.role.toUpperCase()})`,
-    icon: UserCheck,
-    action: async () => {
-      await loginAs(u.role as any, u.id);
-      toast.success(`Switched persona to ${u.full_name} (${u.title})`);
-      onClose();
-    },
-  }));
-
-  const allCommands = [...actionCommands, ...navigationCommands, ...personaCommands];
+  const allCommands = [...actionCommands, ...navigationCommands];
 
   const filteredCommands = allCommands.filter((cmd) => {
     if (!query.trim()) return true;

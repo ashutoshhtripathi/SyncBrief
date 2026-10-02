@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { AppLayout } from './components/layout/AppLayout';
@@ -12,6 +12,7 @@ import { QuickAddTaskModal } from './components/QuickAddTaskModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 
 // Pages
+import { LoginPage } from './pages/LoginPage';
 import { LandingPage } from './pages/LandingPage';
 import { CheckinPage } from './pages/CheckinPage';
 import { DigestPage } from './pages/DigestPage';
@@ -35,6 +36,7 @@ const queryClient = new QueryClient({
 });
 
 const AppContent: React.FC = () => {
+  const { user, isLoading } = useAuth();
   const navigate = useNavigate();
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -122,6 +124,19 @@ const AppContent: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigate]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400">
+        <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3.5" />
+        <div className="text-xs font-semibold tracking-wide">Connecting to secure workspace...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
 
   return (
     <AppLayout

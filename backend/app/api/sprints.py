@@ -25,29 +25,50 @@ def sprint_to_response(s: Sprint, db: Session) -> dict:
     }
 
 @router.get("", response_model=List[SprintResponse])
-def get_all_sprints(db: Session = Depends(get_db)):
-    """List all active/planned sprints sorted by status and date."""
-    sprints = db.query(Sprint).filter(Sprint.deleted_at.is_(None)).order_by(
+def get_all_sprints(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all active/planned sprints sorted by status and date, scoped to user's tenant."""
+    query = db.query(Sprint).filter(Sprint.deleted_at.is_(None))
+    if current_user.tenant_id is not None:
+        query = query.filter(Sprint.tenant_id == current_user.tenant_id)
+    sprints = query.order_by(
         Sprint.status.desc(),
         Sprint.end_date.desc()
     ).all()
     return [sprint_to_response(s, db) for s in sprints]
 
 @router.get("/active", response_model=Optional[SprintResponse])
-def get_active_sprint(db: Session = Depends(get_db)):
-    """Get the currently active sprint."""
-    sprint = db.query(Sprint).filter(Sprint.status == "active", Sprint.deleted_at.is_(None)).first()
+def get_active_sprint(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the currently active sprint in the tenant organization."""
+    query = db.query(Sprint).filter(Sprint.deleted_at.is_(None))
+    if current_user.tenant_id is not None:
+        query = query.filter(Sprint.tenant_id == current_user.tenant_id)
+    
+    sprint = query.filter(Sprint.status == "active").first()
     if not sprint:
-        sprint = db.query(Sprint).filter(Sprint.deleted_at.is_(None)).order_by(Sprint.id.desc()).first()
+        sprint = query.order_by(Sprint.id.desc()).first()
     if not sprint:
         return None
     return sprint_to_response(sprint, db)
 
 @router.get("/{sprint_id}", response_model=SprintResponse)
-def get_sprint_by_id(sprint_id: int, db: Session = Depends(get_db)):
+def get_sprint_by_id(
+    sprint_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     sprint = db.query(Sprint).filter(Sprint.id == sprint_id, Sprint.deleted_at.is_(None)).first()
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
+
+    if current_user.tenant_id is not None and sprint.tenant_id is not None and current_user.tenant_id != sprint.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Sprint belongs to a different organization")
+
     return sprint_to_response(sprint, db)
 
 @router.post("", response_model=SprintResponse)
@@ -56,8 +77,9 @@ def create_sprint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new sprint."""
+    """Create a new sprint scoped to the current user's tenant."""
     new_sprint = Sprint(
+        tenant_id=current_user.tenant_id,
         name=req.name,
         start_date=req.start_date,
         end_date=req.end_date,
@@ -79,6 +101,9 @@ def update_sprint(
     sprint = db.query(Sprint).filter(Sprint.id == sprint_id).first()
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
+
+    if current_user.tenant_id is not None and sprint.tenant_id is not None and current_user.tenant_id != sprint.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Sprint belongs to a different organization")
 
     if req.name is not None: sprint.name = req.name
     if req.start_date is not None: sprint.start_date = req.start_date
@@ -107,6 +132,9 @@ def close_sprint(
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
 
+    if current_user.tenant_id is not None and sprint.tenant_id is not None and current_user.tenant_id != sprint.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Sprint belongs to a different organization")
+
     target_sprint_id = req.target_sprint_id
 
     # Create next sprint automatically if requested
@@ -115,6 +143,7 @@ def close_sprint(
         new_start = sprint.end_date
         new_end = new_start + timedelta(days=14)
         next_sprint = Sprint(
+            tenant_id=current_user.tenant_id,
             name=next_name,
             start_date=new_start,
             end_date=new_end,
@@ -148,3 +177,4 @@ def close_sprint(
         "target_sprint_id": target_sprint_id,
         "carried_over_task_ids": carried_over_tasks
     }
+

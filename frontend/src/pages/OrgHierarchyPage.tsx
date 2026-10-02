@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Network, 
-  ShieldCheck, 
   UserPlus, 
   Edit3, 
   Trash2, 
@@ -10,9 +9,7 @@ import {
   AlertTriangle, 
   Building2, 
   GraduationCap, 
-  CheckCircle2, 
   XCircle, 
-  Lock, 
   Key, 
   X,
   Search,
@@ -25,22 +22,22 @@ import {
   fetchAllUsers, 
   createUser, 
   updateUser, 
-  deleteUser, 
-  fetchUserPoints 
+  deleteUser 
 } from '../api';
 import { HierarchyNode, User } from '../types';
 
 export const OrgHierarchyPage: React.FC = () => {
-  const { user, loginAs } = useAuth();
+  const { user } = useAuth();
   const toast = useToast();
   const [hierarchy, setHierarchy] = useState<HierarchyNode[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Test visibility state
-  const [testTargetUserId, setTestTargetUserId] = useState<number | null>(null);
-  const [testResult, setTestResult] = useState<{ status: number; message: string; data?: any } | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
+  const isManagerOrDirector =
+    user?.role === 'manager' ||
+    user?.role === 'director' ||
+    user?.role === 'admin' ||
+    (user?.role_level !== undefined && user.role_level <= 2);
 
   // User CRUD Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -79,27 +76,6 @@ export const OrgHierarchyPage: React.FC = () => {
     }
   };
 
-  // Test backend hierarchy visibility rule
-  const handleTestVisibility = async (targetId: number) => {
-    setTestTargetUserId(targetId);
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const data = await fetchUserPoints(targetId);
-      setTestResult({
-        status: 200,
-        message: `Success (200 OK): Allowed to access ${data.user_name}'s points & records as they are yourself or a subordinate in your reporting chain.`,
-        data
-      });
-    } catch (err: any) {
-      setTestResult({
-        status: 403,
-        message: `Access Denied (403 Forbidden): ${err.message}`,
-      });
-    } finally {
-      setIsTesting(false);
-    }
-  };
 
   // Create User
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -219,38 +195,21 @@ export const OrgHierarchyPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Actions & Visibility Test */}
-          <div className="flex items-center gap-2 pt-2 sm:pt-0">
-            <button
-              onClick={() => handleTestVisibility(node.id)}
-              className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold transition flex items-center gap-1"
-              title="Test backend 403 RBAC visibility check on this user"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
-              <span>Test Visibility</span>
-            </button>
-
-            {!isCurrentUser && (
+          {/* Quick Actions (Manager / Director only) */}
+          {isManagerOrDirector && (
+            <div className="flex items-center gap-2 pt-2 sm:pt-0">
               <button
-                onClick={() => loginAs(node.role as any, node.id)}
-                className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-semibold hover:bg-blue-100 transition"
-                title="Switch login to this user"
+                onClick={() => {
+                  const u = allUsers.find(x => x.id === node.id);
+                  if (u) openEditModal(u);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                title="Edit User"
               >
-                <span>Switch to User</span>
+                <Edit3 className="w-3.5 h-3.5" />
               </button>
-            )}
-
-            <button
-              onClick={() => {
-                const u = allUsers.find(x => x.id === node.id);
-                if (u) openEditModal(u);
-              }}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-              title="Edit User"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Children Subordinates */}
@@ -273,33 +232,35 @@ export const OrgHierarchyPage: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Network className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              <span>Organization Hierarchy &amp; Backend RBAC</span>
+              <span>Organization Hierarchy &amp; Directory</span>
             </h1>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Generic 3-level structure (Director &gt; Manager &gt; Employee) strictly enforced in backend controllers. Peers and superiors return HTTP 403 Forbidden.
+            Enterprise 3-level reporting structure (Director &gt; Manager &gt; Employee) and team directory.
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setFormData({
-              full_name: '',
-              email: '',
-              password: 'demo1234',
-              role: 'employee',
-              title: 'Software Engineer',
-              role_level: 3,
-              reports_to_id: user?.id || null,
-              org_type: 'engineering'
-            });
-            setIsAddModalOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Add User to Org</span>
-        </button>
+        {isManagerOrDirector && (
+          <button
+            onClick={() => {
+              setFormData({
+                full_name: '',
+                email: '',
+                password: 'demo1234',
+                role: 'employee',
+                title: 'Software Engineer',
+                role_level: 3,
+                reports_to_id: user?.id || null,
+                org_type: 'engineering'
+              });
+              setIsAddModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Add User to Org</span>
+          </button>
+        )}
       </div>
 
       {/* Org Structure Pill */}
@@ -308,38 +269,14 @@ export const OrgHierarchyPage: React.FC = () => {
         <span>SyncBrief Engineering Team &bull; Director (L1) &rarr; Manager (L2) &rarr; Employee (L3)</span>
       </div>
 
-      {/* Backend Visibility Verification Result Banner */}
-      {testResult && (
-        <div className={`p-4.5 rounded-2xl border text-xs space-y-2 animate-in fade-in ${
-          testResult.status === 200 
-            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100'
-            : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-100'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 font-bold">
-              {testResult.status === 200 ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-              ) : (
-                <Lock className="w-5 h-5 text-rose-600" />
-              )}
-              <span>Backend Controller Response: HTTP {testResult.status}</span>
-            </div>
-            <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-black/10">
-              Evaluated for: {user?.full_name} (L{user?.role_level})
-            </span>
-          </div>
-          <p className="leading-relaxed">{testResult.message}</p>
-        </div>
-      )}
-
       {/* Hierarchy Visual Tree */}
       <div className="p-6 rounded-3xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-4">
         <div className="flex items-center justify-between">
           <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
-            Reporting Structure & Levels
+            Reporting Structure &amp; Levels
           </div>
           <div className="text-xs text-slate-400">
-            Click "Test Visibility" on any user to verify backend 403 rule
+            Enterprise Reporting Structure
           </div>
         </div>
 
@@ -353,15 +290,15 @@ export const OrgHierarchyPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Admin User Management Table */}
+      {/* Organization User Directory Table */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
         <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              All Users & Reporting Chain Ledger (Admin CRUD)
+              Organization Directory &amp; Reporting Ledger
             </h3>
             <p className="text-xs text-slate-500">
-              Configure who reports to whom and their role levels.
+              Directory of team members, roles, and reporting relationships.
             </p>
           </div>
           <span className="text-xs text-slate-400 font-mono">
@@ -378,7 +315,7 @@ export const OrgHierarchyPage: React.FC = () => {
                 <th className="py-3 px-3">Level</th>
                 <th className="py-3 px-3">Hierarchy / Org</th>
                 <th className="py-3 px-3">Reports To</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                {isManagerOrDirector && <th className="py-3 px-4 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -400,23 +337,25 @@ export const OrgHierarchyPage: React.FC = () => {
                   <td className="py-3 px-3 font-medium text-slate-800 dark:text-slate-200">
                     {u.manager_name || 'Top-Level (None)'}
                   </td>
-                  <td className="py-3 px-4 text-right space-x-1">
-                    <button
-                      onClick={() => openEditModal(u)}
-                      className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold transition"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => {
-                        setUserToDelete(u);
-                        setIsDeleteModalOpen(true);
-                      }}
-                      className="px-2.5 py-1 rounded bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 font-semibold transition"
-                    >
-                      Delete
-                    </button>
-                  </td>
+                  {isManagerOrDirector && (
+                    <td className="py-3 px-4 text-right space-x-1">
+                      <button
+                        onClick={() => openEditModal(u)}
+                        className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold transition"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          setUserToDelete(u);
+                          setIsDeleteModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-700 dark:text-rose-300 font-semibold transition"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

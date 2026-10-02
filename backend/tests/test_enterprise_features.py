@@ -30,13 +30,20 @@ def test_security_headers_present(client):
     assert "default-src" in resp.headers.get("Content-Security-Policy", "")
     assert "Strict-Transport-Security" in resp.headers
 
+def get_auth_token(client, email: str, password: str = "demo1234") -> str:
+    login_resp = client.post("/api/auth/login", json={"email": email, "password": password})
+    assert login_resp.status_code == 200, f"Login failed for {email}: {login_resp.text}"
+    return login_resp.json()["access_token"]
+
 def test_refresh_token_lifecycle(client):
     """Test login, token refresh, and logout flow."""
-    login_resp = client.post("/api/auth/demo-login", json={"role": "employee"})
+    login_resp = client.post("/api/auth/login", json={"email": "priya.sharma@syncbrief.ai", "password": "demo1234"})
     assert login_resp.status_code == 200
     data = login_resp.json()
     assert "access_token" in data
     assert "refresh_token" in data
+    assert data["user"]["tenant_id"] == 1
+    assert data["user"]["tenant_name"] == "SyncBrief Enterprise"
     refresh_token = data["refresh_token"]
 
     # Rotate token
@@ -56,8 +63,7 @@ def test_refresh_token_lifecycle(client):
 
 def test_optimistic_concurrency_conflict(client):
     """Prove that updating a task with a stale version returns HTTP 409 Conflict."""
-    login_resp = client.post("/api/auth/demo-login", json={"role": "director"})
-    token = login_resp.json()["access_token"]
+    token = get_auth_token(client, "sarah.jenkins@syncbrief.ai")
     headers = {"Authorization": f"Bearer {token}"}
 
     # Fetch tasks
@@ -90,8 +96,7 @@ def test_optimistic_concurrency_conflict(client):
 
 def test_task_soft_delete_and_restore(client):
     """Test soft delete hides tasks and restore brings them back."""
-    login_resp = client.post("/api/auth/demo-login", json={"role": "director"})
-    token = login_resp.json()["access_token"]
+    token = get_auth_token(client, "sarah.jenkins@syncbrief.ai")
     headers = {"Authorization": f"Bearer {token}"}
 
     # Create temporary task
@@ -123,12 +128,15 @@ def test_task_soft_delete_and_restore(client):
 
 def test_recomputable_points_verification(client):
     """Verify that points recomputation derives 100% exact math from completed tasks."""
-    login_resp = client.post("/api/auth/demo-login", json={"role": "director"})
-    token = login_resp.json()["access_token"]
+    token = get_auth_token(client, "sarah.jenkins@syncbrief.ai")
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Get Priya Sharma (user_id 3)
-    recomp_resp = client.get("/api/points/recompute/3", headers=headers)
+    # Find Priya Sharma's ID dynamically
+    users_resp = client.get("/api/auth/users", headers=headers)
+    priya = next(u for u in users_resp.json() if u["email"] == "priya.sharma@syncbrief.ai")
+    priya_id = priya["id"]
+
+    recomp_resp = client.get(f"/api/points/recompute/{priya_id}", headers=headers)
     assert recomp_resp.status_code == 200
     data = recomp_resp.json()
     assert data["is_mathematically_verified"] is True
@@ -137,8 +145,7 @@ def test_recomputable_points_verification(client):
 
 def test_export_my_data(client):
     """Verify user can export their complete GDPR/PII data package."""
-    login_resp = client.post("/api/auth/demo-login", json={"role": "employee"})
-    token = login_resp.json()["access_token"]
+    token = get_auth_token(client, "priya.sharma@syncbrief.ai")
     headers = {"Authorization": f"Bearer {token}"}
 
     export_resp = client.get("/api/auth/me/export", headers=headers)
@@ -148,3 +155,27 @@ def test_export_my_data(client):
     assert "checkins" in data
     assert "tasks" in data
     assert "points_summary" in data
+
+def test_multi_tenant_boundary_isolation(client):
+    """Verify complete tenant isolation: Tenant 1 cannot access Tenant 2 users or data."""
+    t1_token = get_auth_token(client, "sarah.jenkins@syncbrief.ai")
+    t2_token = get_auth_token(client, "alice.smith@acme.com")
+
+    # Tenant 1 users list should only contain tenant_id=1
+    t1_users = client.get("/api/auth/users", headers={"Authorization": f"Bearer {t1_token}"}).json()
+    assert len(t1_users) > 0
+    assert all(u["tenant_id"] == 1 for u in t1_users)
+    assert not any(u["email"] == "alice.smith@acme.com" for u in t1_users)
+
+    # Tenant 2 users list should only contain tenant_id=2
+    t2_users = client.get("/api/auth/users", headers={"Authorization": f"Bearer {t2_token}"}).json()
+    assert len(t2_users) == 1
+    assert t2_users[0]["email"] == "alice.smith@acme.com"
+    assert t2_users[0]["tenant_id"] == 2
+    assert t2_users[0]["tenant_name"] == "Acme Corporation"
+
+    # Cross-tenant profile access must be forbidden (403)
+    alice_id = t2_users[0]["id"]
+    cross_resp = client.get(f"/api/auth/users/{alice_id}", headers={"Authorization": f"Bearer {t1_token}"})
+    assert cross_resp.status_code == 403
+    assert "different organization" in cross_resp.json()["detail"].lower()

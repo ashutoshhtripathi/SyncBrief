@@ -12,6 +12,8 @@ export interface User {
   reports_to_id?: number | null;
   org_type?: 'engineering' | 'university';
   manager_name?: string | null;
+  tenant_id?: number;
+  tenant_name?: string;
 }
 
 export interface CitationItem {

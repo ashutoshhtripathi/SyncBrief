@@ -28,14 +28,9 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onOpenQuickAdd = () => {} }) => {
   const navigate = useNavigate();
-  const { user, loginAs } = useAuth();
+  const { user } = useAuth();
   const [activeMainTab, setActiveMainTab] = useState<'today' | 'showcase'>('today');
   const [activeStepTab, setActiveStepTab] = useState<'checkin' | 'extract' | 'verify' | 'devops'>('verify');
-
-  const handleTryDemo = async (role: 'manager' | 'member' = 'manager') => {
-    await loginAs(role);
-    navigate(role === 'manager' ? '/digest' : '/checkin');
-  };
 
   return (
     <div className="space-y-6 pb-20">
@@ -118,26 +113,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenQuickAdd = () =>
           {/* Action CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-4">
             <button
-              onClick={() => handleTryDemo('manager')}
+              onClick={() => navigate('/digest')}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-lg shadow-blue-600/25 hover:shadow-xl transition-all duration-150 transform hover:-translate-y-0.5 active:translate-y-0"
             >
-              <span>Explore as Sarah (Manager)</span>
+              <span>Explore Standup Digest</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
             <button
-              onClick={() => handleTryDemo('member')}
+              onClick={() => navigate('/checkin')}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-semibold text-sm shadow-xs transition transform hover:-translate-y-0.5"
             >
               <Zap className="w-4 h-4 text-amber-500" />
-              <span>Submit Check-in as Priya (Member)</span>
+              <span>Submit Check-in</span>
             </button>
           </div>
 
           {/* Trust Badges */}
           <div className="pt-4 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
             <span className="flex items-center gap-1.5 font-medium">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Instant Demo &bull; No Login Required
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Enterprise Multi-Tenant &bull; Role-Based Access
             </span>
             <span className="flex items-center gap-1.5 font-medium">
               <ShieldCheck className="w-4 h-4 text-blue-500" /> Privacy First (Zero DM Scraping)
@@ -477,16 +472,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenQuickAdd = () =>
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <button
-              onClick={() => handleTryDemo('manager')}
+              onClick={() => navigate('/digest')}
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white text-blue-700 font-bold text-sm shadow hover:bg-sky-50 transition"
             >
-              Start as Sarah (Manager)
+              Explore Daily Digest
             </button>
             <button
-              onClick={() => handleTryDemo('member')}
+              onClick={() => navigate('/checkin')}
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-800/60 hover:bg-blue-800 text-white border border-white/20 font-bold text-sm transition"
             >
-              Start as Priya (Member)
+              Submit Daily Check-in
             </button>
           </div>
         </div>

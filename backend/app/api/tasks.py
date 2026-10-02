@@ -6,7 +6,7 @@ from backend.app.database import get_db
 from backend.app.models import Task, User, Sprint
 from backend.app.schemas import TaskCreate, TaskUpdate, TaskStatusUpdate, TaskResponse
 from backend.app.auth_deps import get_current_user
-from backend.app.hierarchy import can_view_user, enforce_hierarchy_access, calculate_task_points
+from backend.app.hierarchy import can_view_user, enforce_hierarchy_access, calculate_task_points, get_accessible_user_ids, enforce_tenant_access
 
 router = APIRouter(prefix="/tasks", tags=["Tasks & Sprint Board"])
 
@@ -47,17 +47,42 @@ def get_tasks(
 ):
     """
     List tasks with optional filters.
-    If assignee_id is specified and is someone else, ENFORCES HIERARCHY ACCESS:
-    Peers and superiors cannot see another user's tasks (403).
+    ENFORCES HIERARCHY ACCESS & TENANT ISOLATION:
+    - If assignee_id is specified: verifies caller has hierarchy permission to view assignee's tasks (403 if unauthorized).
+    - If assignee_id is not specified:
+      * Director/Admin: accesses all tasks within the tenant organization.
+      * Manager: accesses tasks belonging to their reporting team, themselves, created by them, or unassigned.
+      * Employee: accesses their assigned tasks, tasks created by them, or unassigned tasks.
+    - Tenant isolation: never returns tasks outside current_user.tenant_id.
     """
+    query = db.query(Task).filter(Task.deleted_at.is_(None))
+    if current_user.tenant_id is not None:
+        query = query.filter(Task.tenant_id == current_user.tenant_id)
+
     if assignee_id is not None:
         enforce_hierarchy_access(current_user, assignee_id, db)
+        query = query.filter(Task.assignee_id == assignee_id)
+    else:
+        # Scoped access based on hierarchy level
+        if current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1):
+            pass # Director sees all within tenant
+        elif current_user.role in ["manager"] or (current_user.role_level is not None and current_user.role_level == 2):
+            accessible_ids = get_accessible_user_ids(current_user, db)
+            query = query.filter(
+                (Task.assignee_id.in_(accessible_ids)) | 
+                (Task.creator_id == current_user.id) | 
+                (Task.assignee_id.is_(None))
+            )
+        else:
+            # Employee: only assigned to them, created by them, or unassigned team tasks
+            query = query.filter(
+                (Task.assignee_id == current_user.id) | 
+                (Task.creator_id == current_user.id) | 
+                (Task.assignee_id.is_(None))
+            )
 
-    query = db.query(Task).filter(Task.deleted_at.is_(None))
     if sprint_id:
         query = query.filter(Task.sprint_id == sprint_id)
-    if assignee_id:
-        query = query.filter(Task.assignee_id == assignee_id)
     if priority:
         query = query.filter(Task.priority == priority)
     if status:
@@ -74,11 +99,17 @@ def get_my_tasks(
 ):
     """Get active tasks assigned to the currently logged in user."""
     query = db.query(Task).filter(Task.assignee_id == current_user.id, Task.deleted_at.is_(None))
+    if current_user.tenant_id is not None:
+        query = query.filter(Task.tenant_id == current_user.tenant_id)
+
     if sprint_id:
         query = query.filter(Task.sprint_id == sprint_id)
     else:
-        # Defaults to active sprint if available
-        active_sprint = db.query(Sprint).filter(Sprint.status == "active", Sprint.deleted_at.is_(None)).first()
+        # Defaults to active sprint in the tenant if available
+        sprint_query = db.query(Sprint).filter(Sprint.status == "active", Sprint.deleted_at.is_(None))
+        if current_user.tenant_id is not None:
+            sprint_query = sprint_query.filter(Sprint.tenant_id == current_user.tenant_id)
+        active_sprint = sprint_query.first()
         if active_sprint:
             query = query.filter(Task.sprint_id == active_sprint.id)
     
@@ -94,6 +125,9 @@ def get_task_by_id(
     task = db.query(Task).filter(Task.id == task_id, Task.deleted_at.is_(None)).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if current_user.tenant_id is not None and task.tenant_id is not None and current_user.tenant_id != task.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Task belongs to a different organization")
     
     if task.assignee_id:
         enforce_hierarchy_access(current_user, task.assignee_id, db)
@@ -108,23 +142,37 @@ def create_task(
 ):
     """
     Create a task and assign it.
-    Managers can assign tasks to people below them or themselves.
+    Prevents IDOR by validating that assignee_id is within caller's authorized hierarchy.
     """
     from backend.app.audit import log_audit_event
 
     assignee_id = req.assignee_id or current_user.id
     enforce_hierarchy_access(current_user, assignee_id, db)
 
-    assignee = db.query(User).filter(User.id == assignee_id).first()
-    assignee_name = assignee.full_name if assignee else ""
+    assignee = db.query(User).filter(User.id == assignee_id, User.deleted_at.is_(None)).first()
+    if not assignee:
+        raise HTTPException(status_code=404, detail="Assignee not found")
+    if current_user.tenant_id is not None and assignee.tenant_id is not None and current_user.tenant_id != assignee.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Cannot assign task to a user from a different organization")
+    assignee_name = assignee.full_name
 
     sprint_id = req.sprint_id
-    if not sprint_id:
-        active_sprint = db.query(Sprint).filter(Sprint.status == "active", Sprint.deleted_at.is_(None)).first()
+    if sprint_id:
+        sprint = db.query(Sprint).filter(Sprint.id == sprint_id, Sprint.deleted_at.is_(None)).first()
+        if not sprint:
+            raise HTTPException(status_code=404, detail="Sprint not found")
+        if current_user.tenant_id is not None and sprint.tenant_id is not None and current_user.tenant_id != sprint.tenant_id:
+            raise HTTPException(status_code=403, detail="Forbidden: Sprint belongs to a different organization")
+    else:
+        sprint_query = db.query(Sprint).filter(Sprint.status == "active", Sprint.deleted_at.is_(None))
+        if current_user.tenant_id is not None:
+            sprint_query = sprint_query.filter(Sprint.tenant_id == current_user.tenant_id)
+        active_sprint = sprint_query.first()
         if active_sprint:
             sprint_id = active_sprint.id
 
     new_task = Task(
+        tenant_id=current_user.tenant_id,
         title=req.title,
         description=req.description or "",
         assignee_id=assignee_id,
@@ -153,12 +201,14 @@ def create_task(
         entity_id=new_task.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
         new_values={
             "title": new_task.title,
             "priority": new_task.priority,
             "difficulty": new_task.difficulty,
             "assignee_id": new_task.assignee_id,
-            "status": new_task.status
+            "status": new_task.status,
+            "tenant_id": new_task.tenant_id
         }
     )
     db.commit()
@@ -177,6 +227,9 @@ def update_task(
     task = db.query(Task).filter(Task.id == task_id, Task.deleted_at.is_(None)).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if current_user.tenant_id is not None and task.tenant_id is not None and current_user.tenant_id != task.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Task belongs to a different organization")
 
     if task.assignee_id:
         enforce_hierarchy_access(current_user, task.assignee_id, db)
@@ -202,15 +255,25 @@ def update_task(
 
     if req.assignee_id is not None:
         enforce_hierarchy_access(current_user, req.assignee_id, db)
+        assignee = db.query(User).filter(User.id == req.assignee_id, User.deleted_at.is_(None)).first()
+        if not assignee:
+            raise HTTPException(status_code=404, detail="Assignee not found")
+        if current_user.tenant_id is not None and assignee.tenant_id is not None and current_user.tenant_id != assignee.tenant_id:
+            raise HTTPException(status_code=403, detail="Forbidden: Cannot reassign task to a user in another organization")
         task.assignee_id = req.assignee_id
-        assignee = db.query(User).filter(User.id == req.assignee_id).first()
-        task.assignee_name = assignee.full_name if assignee else ""
+        task.assignee_name = assignee.full_name
 
     if req.title is not None: task.title = req.title
     if req.description is not None: task.description = req.description
     if req.priority is not None: task.priority = req.priority
     if req.difficulty is not None: task.difficulty = req.difficulty
-    if req.sprint_id is not None: task.sprint_id = req.sprint_id
+    if req.sprint_id is not None:
+        sprint = db.query(Sprint).filter(Sprint.id == req.sprint_id, Sprint.deleted_at.is_(None)).first()
+        if not sprint:
+            raise HTTPException(status_code=404, detail="Sprint not found")
+        if current_user.tenant_id is not None and sprint.tenant_id is not None and current_user.tenant_id != sprint.tenant_id:
+            raise HTTPException(status_code=403, detail="Forbidden: Sprint belongs to a different organization")
+        task.sprint_id = req.sprint_id
     if req.progress_pct is not None: task.progress_pct = req.progress_pct
     
     if req.status is not None:
@@ -242,6 +305,7 @@ def update_task(
         entity_id=task.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
         old_values=old_values,
         new_values=new_values
     )
@@ -263,6 +327,9 @@ def update_task_status(
     task = db.query(Task).filter(Task.id == task_id, Task.deleted_at.is_(None)).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if current_user.tenant_id is not None and task.tenant_id is not None and current_user.tenant_id != task.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Task belongs to a different organization")
 
     if task.assignee_id:
         enforce_hierarchy_access(current_user, task.assignee_id, db)
@@ -295,6 +362,7 @@ def update_task_status(
         entity_id=task.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
         old_values={"status": old_status, "version": current_version},
         new_values={"status": task.status, "progress_pct": task.progress_pct, "version": task.version}
     )
@@ -315,6 +383,9 @@ def delete_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    if current_user.tenant_id is not None and task.tenant_id is not None and current_user.tenant_id != task.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Task belongs to a different organization")
+
     if task.assignee_id:
         enforce_hierarchy_access(current_user, task.assignee_id, db)
 
@@ -329,6 +400,7 @@ def delete_task(
         entity_id=task.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
         old_values={"deleted_at": None},
         new_values={"deleted_at": task.deleted_at.isoformat()}
     )
@@ -348,6 +420,9 @@ def restore_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    if current_user.tenant_id is not None and task.tenant_id is not None and current_user.tenant_id != task.tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Task belongs to a different organization")
+
     if task.assignee_id:
         enforce_hierarchy_access(current_user, task.assignee_id, db)
 
@@ -362,9 +437,11 @@ def restore_task(
         entity_id=task.id,
         actor_id=current_user.id,
         actor_name=current_user.full_name,
+        tenant_id=current_user.tenant_id,
         new_values={"deleted_at": None, "version": task.version}
     )
 
     db.commit()
     db.refresh(task)
     return task_to_response(task)
+

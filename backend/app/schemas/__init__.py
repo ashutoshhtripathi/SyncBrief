@@ -20,6 +20,14 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: Dict[str, Any]
 
+class TenantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    domain: str
+    created_at: Optional[datetime] = None
+
 class UserProfile(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,6 +44,8 @@ class UserProfile(BaseModel):
     reports_to_id: Optional[int] = None
     org_type: str = "engineering"
     manager_name: Optional[str] = None
+    tenant_id: Optional[int] = 1
+    tenant_name: Optional[str] = "SyncBrief Enterprise"
 
 class UserCreate(BaseModel):
     email: str
@@ -49,6 +59,7 @@ class UserCreate(BaseModel):
     role_level: int = 5
     reports_to_id: Optional[int] = None
     org_type: str = "engineering"
+    tenant_id: Optional[int] = 1
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None

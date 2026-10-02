@@ -3,7 +3,7 @@ import json
 import logging
 from backend.app.auth_utils import hash_password
 from backend.app.database import SessionLocal, Base, engine
-from backend.app.models import User, Channel, Message, Checkin, Blocker, Digest, AuditLog, SystemSetting, Sprint, Task
+from backend.app.models import Tenant, User, Channel, Message, Checkin, Blocker, Digest, AuditLog, SystemSetting, Sprint, Task
 from backend.app.integrations.teams_cards import TeamsCardGenerator
 from backend.app.integrations.azure_devops import devops_client
 
@@ -20,6 +20,22 @@ def seed_database():
         Base.metadata.create_all(bind=engine)
 
         now = datetime.utcnow()
+
+        print("0. Seeding Tenants (SyncBrief Enterprise & Acme Corporation)...")
+        tenant1 = Tenant(
+            id=1,
+            name="SyncBrief Enterprise",
+            domain="syncbrief.ai",
+            created_at=now
+        )
+        tenant2 = Tenant(
+            id=2,
+            name="Acme Corporation",
+            domain="acme.com",
+            created_at=now
+        )
+        db.add_all([tenant1, tenant2])
+        db.flush()
 
         print("1. Seeding Users (Employee > Manager > Director 8-Person Engineering Team)...")
         # Sarah Jenkins (Director, L1)
@@ -43,6 +59,7 @@ def seed_database():
             streak_count=14,
             role_level=1,
             reports_to_id=None,
+            tenant_id=tenant1.id,
             org_type="engineering"
         )
         db.add(sarah)
@@ -60,6 +77,7 @@ def seed_database():
             streak_count=12,
             role_level=2,
             reports_to_id=sarah.id,
+            tenant_id=tenant1.id,
             org_type="engineering"
         )
         james = User(
@@ -74,6 +92,7 @@ def seed_database():
             streak_count=8,
             role_level=2,
             reports_to_id=sarah.id,
+            tenant_id=tenant1.id,
             org_type="engineering"
         )
         db.add_all([vikram, james])
@@ -91,6 +110,7 @@ def seed_database():
             streak_count=9,
             role_level=3,
             reports_to_id=vikram.id,
+            tenant_id=tenant1.id,
             org_type="engineering"
         )
         elena = User(
@@ -105,6 +125,7 @@ def seed_database():
             streak_count=5,
             role_level=3,
             reports_to_id=vikram.id,
+            tenant_id=tenant1.id,
             org_type="engineering"
         )
         rohan = User(
@@ -119,6 +140,7 @@ def seed_database():
             streak_count=3,
             role_level=3,
             reports_to_id=vikram.id,
+            tenant_id=tenant1.id,
             org_type="engineering"
         )
         alex = User(
@@ -133,6 +155,7 @@ def seed_database():
             streak_count=11,
             role_level=3,
             reports_to_id=james.id,
+            tenant_id=tenant1.id,
             org_type="engineering"
         )
         maya = User(
@@ -147,9 +170,26 @@ def seed_database():
             streak_count=6,
             role_level=3,
             reports_to_id=james.id,
+            tenant_id=tenant1.id,
             org_type="engineering"
         )
-        db.add_all([priya, elena, rohan, alex, maya])
+        # Acme Corporation user for multi-tenant boundary isolation validation
+        alice = User(
+            email="alice.smith@acme.com",
+            hashed_password=hash_password("demo1234"),
+            full_name="Alice Smith",
+            role="director",
+            title="VP of Engineering (Acme)",
+            avatar_url="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+            timezone="America/New_York",
+            reminder_time="09:00",
+            streak_count=5,
+            role_level=1,
+            reports_to_id=None,
+            tenant_id=tenant2.id,
+            org_type="engineering"
+        )
+        db.add_all([priya, elena, rohan, alex, maya, alice])
         db.flush()
 
         print("2. Seeding Sprints (Sprint 42 Closed, Sprint 43 Active)...")
