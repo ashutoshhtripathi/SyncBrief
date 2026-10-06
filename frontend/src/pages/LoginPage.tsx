@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { startOAuthFlow } from '../api';
-import { Lock, Mail, AlertCircle, ArrowRight, ShieldCheck, Sun, Moon } from 'lucide-react';
+import { Lock, Mail, AlertCircle, ArrowRight, Sun, Moon } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { loginWithEmail } = useAuth();
@@ -84,10 +84,8 @@ export const LoginPage: React.FC = () => {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 p-0.5 shadow-lg shadow-blue-500/20 flex items-center justify-center">
-            <div className="w-full h-full bg-white dark:bg-slate-900 rounded-[14px] flex items-center justify-center">
-              <ShieldCheck className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg shadow-sky-500/20 overflow-hidden ring-1 ring-white/10 shrink-0">
+            <img src="/favicon.svg" alt="SyncBrief AI" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
