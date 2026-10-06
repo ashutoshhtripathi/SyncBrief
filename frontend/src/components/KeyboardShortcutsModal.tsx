@@ -16,6 +16,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
       category: 'General & Navigation',
       items: [
         { keys: ['⌘', 'K'], desc: 'Open Command Palette' },
+        { keys: ['⌘', 'J'], desc: 'Ask SyncBrief AI Assistant' },
         { keys: ['/'], desc: 'Search or focus search' },
         { keys: ['?'], desc: 'Show keyboard shortcuts cheat-sheet' },
         { keys: ['ESC'], desc: 'Close dialog, drawer, or search' },
@@ -37,6 +38,9 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
         { keys: ['G', 'D'], desc: 'Jump to Daily Standup Digest' },
         { keys: ['G', 'P'], desc: 'Jump to My Points & Velocity' },
         { keys: ['G', 'A'], desc: 'Jump to Team Appraisal Review' },
+        { keys: ['G', 'W'], desc: 'Jump to What Changed Intelligence' },
+        { keys: ['G', 'X'], desc: 'Jump to Cross-Team Dependencies' },
+        { keys: ['G', 'H'], desc: 'Jump to Performance History' },
       ],
     },
   ];

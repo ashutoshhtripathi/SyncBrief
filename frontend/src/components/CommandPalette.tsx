@@ -32,6 +32,7 @@ interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenQuickAdd: () => void;
+  onOpenAssistant?: () => void;
   onStartTour?: () => void;
 }
 
@@ -49,6 +50,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   isOpen,
   onClose,
   onOpenQuickAdd,
+  onOpenAssistant,
 }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -142,7 +144,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: 'Deterministic tracking of who is waiting on whom & delivery risk',
       icon: GitFork,
       action: () => { navigate('/dependencies'); onClose(); },
-      shortcut: 'G D',
+      shortcut: 'G X',
     },
     {
       id: 'nav-performance-history',
@@ -216,6 +218,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   ];
 
   const actionCommands: CommandItem[] = [
+    {
+      id: 'action-ask-assistant',
+      category: 'Actions',
+      title: 'Ask SyncBrief Assistant',
+      subtitle: 'Ask questions grounded in authorized SyncBrief records',
+      icon: Sparkles,
+      action: () => {
+        onClose();
+        onOpenAssistant?.();
+      },
+      shortcut: '⌘J',
+    },
     {
       id: 'action-quick-add',
       category: 'Actions',

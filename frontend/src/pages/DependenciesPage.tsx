@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   GitFork, 
   AlertTriangle, 
@@ -36,6 +37,7 @@ import { EvidenceCitationBadge } from '../components/EvidenceCitationBadge';
 
 export const DependenciesPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
 
   const [dependencies, setDependencies] = useState<DependencyItem[]>([]);
@@ -591,12 +593,36 @@ export const DependenciesPage: React.FC = () => {
               )}
 
               {/* Footer Actions */}
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-[11px] text-slate-400">
                   Source: <strong className="capitalize text-slate-600 dark:text-slate-300">{dep.source_type}</strong>
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {dep.source_task_title && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/sprints')}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-900 transition"
+                      title="View task on Sprint Kanban board"
+                    >
+                      <Kanban className="w-3 h-3" />
+                      <span>Open Task</span>
+                    </button>
+                  )}
+
+                  {dep.source_type === 'blocker' && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/blockers')}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg border border-rose-200 dark:border-rose-900 transition"
+                      title="View on Blocker Board"
+                    >
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>Open Blocker</span>
+                    </button>
+                  )}
+
                   {dep.source_type === 'explicit' && (
                     <button
                       type="button"

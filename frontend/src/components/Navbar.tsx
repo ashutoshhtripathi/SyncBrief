@@ -34,11 +34,13 @@ interface NavbarProps {
   onStartTour?: () => void;
   onOpenCommandPalette?: () => void;
   onOpenQuickAdd?: () => void;
+  onOpenAssistant?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ 
   onOpenCommandPalette,
   onOpenQuickAdd,
+  onOpenAssistant,
 }) => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -139,8 +141,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </Link>
 
-        {/* Desktop Navigation Links */}
-        <nav className="hidden 2xl:flex items-center gap-0.5">
+        {/* Desktop Navigation Links (Full on xl+) */}
+        <nav className="hidden xl:flex items-center gap-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -148,7 +150,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Link
                 key={item.path}
                 to={item.path}
-                className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                className={`relative flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
                   isActive
                     ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 shadow-xs ring-1 ring-blue-500/20'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/80'
@@ -167,9 +169,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </nav>
 
-        {/* Medium-screen compact primary links */}
-        <nav className="hidden md:flex 2xl:hidden items-center gap-1">
-          {navItems.slice(0, 6).map((item) => {
+        {/* Medium-screen compact links (md to xl) */}
+        <nav className="hidden md:flex xl:hidden items-center gap-1">
+          {navItems.slice(0, 5).map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             return (
@@ -188,6 +190,36 @@ export const Navbar: React.FC<NavbarProps> = ({
               </Link>
             );
           })}
+          {/* Quick jump menu for remaining items */}
+          <div className="relative group">
+            <button
+              type="button"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <span>More</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+            <div className="absolute right-0 top-full mt-1 w-48 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl hidden group-hover:block z-50 animate-in fade-in">
+              {navItems.slice(5).map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium transition ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 font-bold'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         </nav>
 
         {/* Right Section: Command Palette, Quick Add, User Profile Menu, Theme */}
@@ -218,6 +250,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Task</span>
               <kbd className="hidden md:inline-block px-1 py-0.2 rounded bg-blue-700 text-[9px] font-mono opacity-80">
                 C
+              </kbd>
+            </button>
+          )}
+
+          {/* Ask SyncBrief Assistant Button */}
+          {onOpenAssistant && (
+            <button
+              onClick={onOpenAssistant}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-700 hover:to-pink-700 text-white text-xs font-bold shadow-sm shadow-indigo-500/20 hover:shadow-indigo-500/35 transition-all transform hover:-translate-y-0.5"
+              title="Ask SyncBrief AI (Cmd+J)"
+            >
+              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+              <span className="hidden sm:inline">Ask SyncBrief</span>
+              <kbd className="hidden lg:inline-block px-1 py-0.2 rounded bg-white/20 text-[9px] font-mono text-white">
+                ⌘J
               </kbd>
             </button>
           )}
@@ -346,6 +393,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               );
             })}
           </div>
+
+          {onOpenAssistant && (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenAssistant();
+              }}
+              className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white text-xs font-bold shadow-md shadow-indigo-500/20"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Ask SyncBrief Assistant</span>
+            </button>
+          )}
 
           {user && (
             <div className="pt-2 flex flex-col gap-2 text-xs text-slate-500 dark:text-slate-400">

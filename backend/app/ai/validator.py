@@ -138,6 +138,19 @@ class EvidenceValidator:
         return " ".join(str(text).split()).strip().lower()
 
     @classmethod
+    def validate_citation(
+        cls,
+        citation: Dict[str, Any],
+        db: Any = None,
+        current_user: Any = None
+    ) -> Dict[str, Any]:
+        from backend.app.models import User
+        from sqlalchemy.orm import Session
+        if isinstance(db, User) and (current_user is None or isinstance(current_user, Session)):
+            current_user, db = db, current_user
+        return cls.validate_evidence_item(citation, current_user, db)
+
+    @classmethod
     def validate_evidence_item(
         cls,
         evidence: Dict[str, Any],
@@ -163,7 +176,7 @@ class EvidenceValidator:
             item["rejection_reason"] = "Missing source_id"
             return item
 
-        valid_types = ["task", "checkin", "blocker", "sprint", "digest", "goal", "performance_goal"]
+        valid_types = ["task", "checkin", "blocker", "sprint", "digest", "goal", "performance_goal", "dependency", "task_dependency"]
         if source_type not in valid_types:
             item["verified"] = False
             item["rejection_reason"] = f"Unsupported source_type '{source_type}'. Must be one of {valid_types}"

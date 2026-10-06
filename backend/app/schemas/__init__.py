@@ -1021,4 +1021,17 @@ class DependencyListResponse(BaseModel):
     summary: DependencySummaryResponse
     dependencies: List[DependencyItem] = []
 
+# --- Phase 9 Ask SyncBrief AI Assistant Schemas ---
+class AssistantChatRequest(BaseModel):
+    message: str
+    conversation_id: Optional[str] = None
+
+class AssistantChatResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    answer: str
+    citations: List[EvidenceCitation] = []
+    conversation_id: str
+    insufficient_data: bool = False
+
 

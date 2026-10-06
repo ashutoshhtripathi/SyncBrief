@@ -8,6 +8,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { CommandPalette } from './components/CommandPalette';
 import { QuickAddTaskModal } from './components/QuickAddTaskModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { AskSyncBriefDrawer } from './components/AskSyncBriefDrawer';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
@@ -45,11 +46,12 @@ const AppContent: React.FC = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
 
   const lastKeyRef = useRef<string>('');
   const lastKeyTimeRef = useRef<number>(0);
 
-  // Global keyboard shortcuts (Cmd+K, C, ?, /, and G-chords)
+  // Global keyboard shortcuts (Cmd+K, Cmd+J, C, ?, /, and G-chords)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -61,6 +63,13 @@ const AppContent: React.FC = () => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      // Cmd+J or Ctrl+J -> Ask SyncBrief Assistant (works even in inputs)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setIsAssistantOpen((prev) => !prev);
         return;
       }
 
@@ -114,6 +123,12 @@ const AppContent: React.FC = () => {
         } else if (e.key === 'w' || e.key === 'W') {
           e.preventDefault();
           navigate('/what-changed');
+        } else if (e.key === 'x' || e.key === 'X') {
+          e.preventDefault();
+          navigate('/dependencies');
+        } else if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          navigate('/performance-history');
         }
         lastKeyRef.current = '';
         return;
@@ -153,6 +168,7 @@ const AppContent: React.FC = () => {
       onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       onOpenQuickAdd={() => setIsQuickAddOpen(true)}
       onOpenShortcuts={() => setIsShortcutsOpen(true)}
+      onOpenAssistant={() => setIsAssistantOpen(true)}
     >
       <Routes>
         <Route path="/" element={<LandingPage onOpenQuickAdd={() => setIsQuickAddOpen(true)} />} />
@@ -177,6 +193,7 @@ const AppContent: React.FC = () => {
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+        onOpenAssistant={() => setIsAssistantOpen(true)}
       />
 
       <QuickAddTaskModal
@@ -187,6 +204,11 @@ const AppContent: React.FC = () => {
       <KeyboardShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      <AskSyncBriefDrawer
+        isOpen={isAssistantOpen}
+        onClose={() => setIsAssistantOpen(false)}
       />
     </AppLayout>
   );

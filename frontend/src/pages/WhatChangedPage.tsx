@@ -20,7 +20,8 @@ import {
   Info,
   CalendarDays,
   Zap,
-  CheckSquare
+  CheckSquare,
+  GitFork
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -805,11 +806,21 @@ export const WhatChangedPage: React.FC = () => {
                     )}
                   </div>
 
-                  {task.evidence && task.evidence.length > 0 && (
-                    <div className="pt-1">
-                      <EvidenceCitationGroup citations={task.evidence} />
+                  <div className="pt-2 flex items-center justify-between border-t border-emerald-200/50 dark:border-emerald-900/40">
+                    <div>
+                      {task.evidence && task.evidence.length > 0 ? (
+                        <EvidenceCitationGroup citations={task.evidence} />
+                      ) : <span className="text-[10px] text-slate-400">Verified task completion</span>}
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/appraisal')}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
+                    >
+                      <Users className="w-3 h-3" />
+                      <span>Review Employee</span>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -890,11 +901,21 @@ export const WhatChangedPage: React.FC = () => {
                       </div>
                     )}
 
-                    {task.evidence && task.evidence.length > 0 && (
-                      <div className="pt-1">
-                        <EvidenceCitationGroup citations={task.evidence} />
+                    <div className="pt-2 flex items-center justify-between border-t border-slate-200/60 dark:border-slate-800">
+                      <div>
+                        {task.evidence && task.evidence.length > 0 ? (
+                          <EvidenceCitationGroup citations={task.evidence} />
+                        ) : <span className="text-[10px] text-slate-400">Verified progress delta</span>}
                       </div>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/appraisal')}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        <Users className="w-3 h-3" />
+                        <span>Review Employee</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1003,11 +1024,31 @@ export const WhatChangedPage: React.FC = () => {
                       )}
                     </div>
 
-                    {b.evidence && b.evidence.length > 0 && (
-                      <div className="pt-1">
-                        <EvidenceCitationGroup citations={b.evidence} />
+                    <div className="pt-2 flex items-center justify-between border-t border-rose-200/60 dark:border-rose-900/40">
+                      <div>
+                        {b.evidence && b.evidence.length > 0 ? (
+                          <EvidenceCitationGroup citations={b.evidence} />
+                        ) : <span className="text-[10px] text-slate-400">Verified blocker update</span>}
                       </div>
-                    )}
+                      {b.blocked_by && b.blocked_by !== 'Unassigned' ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/dependencies')}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 dark:text-rose-400 hover:underline"
+                        >
+                          <GitFork className="w-3 h-3" />
+                          <span>View Dependency</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/blockers')}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 dark:text-rose-400 hover:underline"
+                        >
+                          <span>Open Blocker</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1057,11 +1098,31 @@ export const WhatChangedPage: React.FC = () => {
                       )}
                     </div>
 
-                    {b.evidence && b.evidence.length > 0 && (
-                      <div className="pt-1">
-                        <EvidenceCitationGroup citations={b.evidence} />
+                    <div className="pt-2 flex items-center justify-between border-t border-amber-200/60 dark:border-amber-900/40">
+                      <div>
+                        {b.evidence && b.evidence.length > 0 ? (
+                          <EvidenceCitationGroup citations={b.evidence} />
+                        ) : <span className="text-[10px] text-slate-400">Aging blocker</span>}
                       </div>
-                    )}
+                      {b.blocked_by && b.blocked_by !== 'Unassigned' ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/dependencies')}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 dark:text-amber-400 hover:underline"
+                        >
+                          <GitFork className="w-3 h-3" />
+                          <span>View Dependency</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/blockers')}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 dark:text-amber-400 hover:underline"
+                        >
+                          <span>Open Blocker</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

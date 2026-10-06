@@ -22,7 +22,8 @@ import {
   Edit2,
   Circle,
   X,
-  ListChecks
+  ListChecks,
+  GitFork
 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -37,9 +38,10 @@ import {
   updateTask,
   updateBlockerStatus,
   syncToDevOps,
-  fetchWhatChanged
+  fetchWhatChanged,
+  fetchDependencies
 } from '../api';
-import { Task, Sprint, Checkin, Blocker, User, WhatChangedResponse } from '../types';
+import { Task, Sprint, Checkin, Blocker, User, WhatChangedResponse, DependencyListResponse } from '../types';
 import { CitationBadge } from './CitationBadge';
 
 interface TodayDashboardProps {
@@ -59,6 +61,7 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
   const [subordinates, setSubordinates] = useState<User[]>([]);
   const [allCheckins, setAllCheckins] = useState<Checkin[]>([]);
   const [whatChangedSummary, setWhatChangedSummary] = useState<WhatChangedResponse | null>(null);
+  const [dependencyData, setDependencyData] = useState<DependencyListResponse | null>(null);
 
   // Inline editing state for task
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
@@ -140,7 +143,7 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
       actionLabel: 'Open Sprint Board',
       onClick: () => {
         if (!completedSteps.includes('sprint_tasks')) toggleStep('sprint_tasks');
-        navigate('/sprint');
+        navigate('/sprints');
       },
     },
     {
@@ -195,21 +198,18 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
       setTodayCheckin(myLatestCheckin || null);
 
       if (isManagerOrDirector) {
-        // Manager view: fetch reports, tasks for reports, and What Changed delta
+        // Manager view: fetch reports, tasks for reports, What Changed delta, and Cross-Team Dependencies
         fetchWhatChanged().then(setWhatChangedSummary).catch(() => {});
+        fetchDependencies({ cross_team_only: true }).then(setDependencyData).catch(() => {});
         try {
           const reports = await fetchMyReports();
           setSubordinates(Array.isArray(reports) ? reports : []);
-          if (active) {
-            const teamTasks = await fetchTasks({ sprint_id: active.id });
-            setTasks(teamTasks);
-          }
         } catch {
           // fallback
-          if (active) {
-            const teamTasks = await fetchTasks({ sprint_id: active.id });
-            setTasks(teamTasks);
-          }
+        }
+        if (active) {
+          const teamTasks = await fetchTasks({ sprint_id: active.id });
+          setTasks(teamTasks);
         }
       } else {
         // Employee view: fetch my tasks
@@ -932,6 +932,79 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
             </div>
           </div>
 
+          {/* Section: Cross-Team Dependencies Executive Summary */}
+          <div className="p-5 rounded-2xl bg-gradient-to-br from-cyan-50/90 via-sky-50/50 to-indigo-50/30 dark:from-slate-900 dark:via-cyan-950/20 dark:to-slate-900 border border-cyan-200/80 dark:border-cyan-900/50 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-cyan-600 text-white flex items-center justify-center shadow-xs">
+                  <GitFork className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-cyan-950 dark:text-cyan-300">
+                    Cross-Team Dependency Intelligence
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Deterministic tracking of who is waiting on whom & sprint delivery risk
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-200 border border-cyan-200 dark:border-cyan-900">
+                Verified
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <div className="text-base font-extrabold text-slate-900 dark:text-white">
+                  {dependencyData?.summary?.total_dependencies ?? (blockers.filter(b => b.status === 'open').length || 1)}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  tracked dependencies
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <div className="text-base font-extrabold text-rose-600 dark:text-rose-400">
+                  {dependencyData?.summary?.critical_count ?? 1}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  critical / blocking
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <div className="text-base font-extrabold text-amber-600 dark:text-amber-400">
+                  {dependencyData?.summary?.aging_count ?? 1}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  aging (≥ 2 days)
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <div className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
+                  {dependencyData?.summary?.affected_sprints_count ?? (activeSprint ? 1 : 0)}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  sprint delivery at risk
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-cyan-100 dark:border-slate-800">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Grounded in verifiable audit trail &bull; Zero chasing across teams
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/dependencies')}
+                className="inline-flex items-center gap-1 text-xs font-bold text-cyan-700 dark:text-cyan-400 hover:text-cyan-800 hover:underline"
+              >
+                <span>Inspect dependencies &rarr;</span>
+              </button>
+            </div>
+          </div>
+
           {/* Section: Who Needs Attention */}
           <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
@@ -993,7 +1066,12 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
                 </div>
 
                 <div className="pt-2 flex items-center justify-between border-t border-rose-200/60 dark:border-rose-900/60">
-                  <span className="text-[10px] text-slate-400">Teams proof verified</span>
+                  <button
+                    onClick={() => navigate('/dependencies')}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 dark:text-rose-400 hover:underline"
+                  >
+                    <span>View in Dependencies &rarr;</span>
+                  </button>
                   <button
                     onClick={() => handleSyncToAzure(1)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-xs transition"

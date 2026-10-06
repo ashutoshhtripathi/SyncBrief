@@ -532,3 +532,227 @@ class MockProvider(AIProvider):
             }
         }
 
+    async def ask_syncbrief(
+        self,
+        context_data: Dict[str, Any],
+        user_message: str,
+        conversation_history: List[Dict[str, str]],
+        user_role: str,
+        user_name: str
+    ) -> Dict[str, Any]:
+        """
+        Deterministic, offline intelligence synthesizer for 'Ask SyncBrief'.
+        Strictly answers based on authorized database records passed in context_data.
+        Provides citations and guardrails against hallucination.
+        """
+        lower_msg = user_message.lower().strip()
+        intent = context_data.get("intent", "unknown")
+        insufficient = context_data.get("insufficient_data", False)
+        target_name = context_data.get("target_user_name", "")
+        citations = context_data.get("citations", [])
+
+        # Check for insufficient data
+        if insufficient:
+            custom_msg = context_data.get("insufficient_reason") or "I don't have enough verified SyncBrief data to answer that."
+            return {
+                "answer": custom_msg,
+                "citations": [],
+                "insufficient_data": True
+            }
+
+        # Follow-up intent checks (e.g. "which one is oldest?", "who owns it?")
+        is_followup = any(kw in lower_msg for kw in ["oldest", "longest", "who owns", "which one", "tell me more", "details"])
+        last_topic = ""
+        if conversation_history:
+            last_bot_turn = next((t["content"] for t in reversed(conversation_history) if t.get("role") == "assistant"), "")
+            if "blocker" in last_bot_turn.lower():
+                last_topic = "blockers"
+            elif "dependenc" in last_bot_turn.lower():
+                last_topic = "dependencies"
+            elif "performance" in last_bot_turn.lower() or "points" in last_bot_turn.lower():
+                last_topic = "performance"
+
+        # 1. BLOCKERS
+        if intent == "blockers" or (is_followup and last_topic == "blockers"):
+            blockers = context_data.get("blockers", [])
+            if not blockers:
+                return {
+                    "answer": "There are currently no active blockers recorded in your authorized view. All systems and deliverables are progressing normally.",
+                    "citations": citations,
+                    "insufficient_data": False
+                }
+
+            if "oldest" in lower_msg or "longest" in lower_msg:
+                # Find oldest blocker
+                sorted_by_age = sorted(blockers, key=lambda b: b.get("age_days", 0), reverse=True)
+                oldest = sorted_by_age[0]
+                ans = (
+                    f"The oldest active blocker is \"{oldest.get('summary')}\" owned by {oldest.get('owner_name', 'Unknown')}. "
+                    f"It has been open for {oldest.get('age_days', 1)} day(s) and is currently blocked by {oldest.get('blocked_by', 'External Team')}."
+                )
+            else:
+                critical_blockers = [b for b in blockers if b.get("severity") in ["critical", "high"]]
+                ans = f"You have {len(blockers)} active blocker(s) in your authorized scope."
+                if critical_blockers:
+                    top_b = critical_blockers[0]
+                    ans += f" High priority: \"{top_b.get('summary')}\" (Owner: {top_b.get('owner_name')}, Blocked by: {top_b.get('blocked_by')})."
+                else:
+                    ans += f" All current blockers are medium or low severity."
+
+            return {
+                "answer": ans,
+                "citations": citations,
+                "insufficient_data": False
+            }
+
+        # 2. DEPENDENCIES
+        if intent == "dependencies" or (is_followup and last_topic == "dependencies"):
+            deps = context_data.get("dependencies", [])
+            summary = context_data.get("summary", {})
+            total = summary.get("total_dependencies", len(deps))
+            critical = summary.get("critical_count", 0)
+            aging = summary.get("aging_count", 0)
+
+            if total == 0:
+                return {
+                    "answer": "No active cross-team dependencies are currently tracked for your authorized scope.",
+                    "citations": citations,
+                    "insufficient_data": False
+                }
+
+            if "oldest" in lower_msg or "aging" in lower_msg:
+                sorted_deps = sorted(deps, key=lambda d: d.get("age_days", 0), reverse=True)
+                oldest_d = sorted_deps[0] if sorted_deps else {}
+                ans = (
+                    f"The oldest cross-team dependency is \"{oldest_d.get('summary')}\", "
+                    f"waiting on {oldest_d.get('dependency_team', 'External Team')} ({oldest_d.get('dependency_owner', 'Unassigned')}) "
+                    f"for {oldest_d.get('age_days', 0)} day(s)."
+                )
+            else:
+                ans = (
+                    f"{total} cross-team dependenc(ies) are currently active in your scope "
+                    f"({critical} critical, {aging} aging ≥ 2 days). "
+                )
+                if deps:
+                    top_d = deps[0]
+                    ans += f"Main bottleneck: \"{top_d.get('summary')}\" affecting {top_d.get('source_task_title', 'sprint tasks')}."
+
+            return {
+                "answer": ans,
+                "citations": citations,
+                "insufficient_data": False
+            }
+
+        # 3. WHAT CHANGED
+        if intent == "what_changed":
+            completed = context_data.get("completed_work", [])
+            in_prog = context_data.get("meaningful_progress", [])
+            new_b = context_data.get("new_blockers", [])
+            prev_day = context_data.get("previous_working_day", "yesterday")
+
+            parts = []
+            if completed:
+                titles = [f"\"{c.get('title')}\" ({c.get('owner')})" for c in completed[:2]]
+                parts.append(f"{len(completed)} task(s) completed: {', '.join(titles)}")
+            if in_prog:
+                prog_owners = {p.get('owner') for p in in_prog}
+                parts.append(f"Meaningful progress logged by {', '.join(prog_owners)}")
+            if new_b:
+                parts.append(f"{len(new_b)} new blocker(s) surfaced")
+
+            if not parts:
+                ans = f"No major status changes or completed tasks were recorded since {prev_day}."
+            else:
+                ans = f"Since {prev_day}: " + "; ".join(parts) + "."
+
+            return {
+                "answer": ans,
+                "citations": citations,
+                "insufficient_data": False
+            }
+
+        # 4. PERFORMANCE & GOALS
+        if intent == "performance":
+            dossier = context_data.get("performance_dossier", {})
+            metrics = dossier.get("current_cycle_metrics", {})
+            goals = dossier.get("goals", [])
+            emp_name = target_name or dossier.get("employee_name", user_name)
+
+            if not goals and not metrics:
+                return {
+                    "answer": f"No active performance goals or cycle metrics found for {emp_name}.",
+                    "citations": citations,
+                    "insufficient_data": False
+                }
+
+            earned = metrics.get("earned_points", 0.0)
+            assigned = metrics.get("assigned_points", 0.0)
+            pct = metrics.get("completion_rate_pct", 0.0)
+            cycle_name = metrics.get("cycle_name", "Current Cycle")
+
+            ans = (
+                f"In {cycle_name}, {emp_name} has earned {earned:.1f} of {assigned:.1f} assigned Performance Points "
+                f"({pct:.1f}% completion rate) across {len(goals)} active goal(s)."
+            )
+            if goals:
+                top_goal = goals[0]
+                ans += f" Key focus area: \"{top_goal.get('title')}\" ({top_goal.get('current_progress_percentage', 0)}% progress)."
+
+            return {
+                "answer": ans,
+                "citations": citations,
+                "insufficient_data": False
+            }
+
+        # 5. REVIEW PREPARATION
+        if intent == "review_prep":
+            dossier = context_data.get("performance_dossier", {})
+            emp_name = target_name or dossier.get("employee_name", user_name)
+            goals = dossier.get("goals", [])
+            ops = dossier.get("operational_delivery", {})
+            topics = dossier.get("review_intelligence", {}).get("suggested_discussion_topics", [])
+
+            ans = f"Verified review preparation briefing for {emp_name}:\n"
+            if topics:
+                ans += "\n".join(f"- {t}" for t in topics[:3])
+            else:
+                ans += (
+                    f"- Goal Progress: {len([g for g in goals if g.get('status') == 'completed'])} completed, "
+                    f"{len([g for g in goals if g.get('status') == 'in_progress'])} in progress.\n"
+                    f"- Operational Delivery: {ops.get('completed_tasks_count', 0)} tasks delivered, "
+                    f"{ops.get('total_story_points_completed', 0)} story points completed."
+                )
+
+            return {
+                "answer": ans,
+                "citations": citations,
+                "insufficient_data": False
+            }
+
+        # 6. TASKS & SPRINT
+        if intent == "tasks_sprint":
+            tasks = context_data.get("tasks", [])
+            sprint = context_data.get("sprint", {})
+            overdue = [t for t in tasks if t.get("is_overdue")]
+            in_prog = [t for t in tasks if t.get("status") in ["in_progress", "active"]]
+
+            sprint_name = sprint.get("name", "Active Sprint")
+            ans = f"In {sprint_name}, {len(tasks)} task(s) are currently tracked ({len(in_prog)} in progress)."
+            if overdue:
+                ans += f" ⚠️ {len(overdue)} task(s) are overdue, including \"{overdue[0].get('title')}\"."
+            else:
+                ans += " No overdue tasks detected."
+
+            return {
+                "answer": ans,
+                "citations": citations,
+                "insufficient_data": False
+            }
+
+        # Default fallback: Insufficient / general out-of-scope question
+        return {
+            "answer": "I don't have enough verified SyncBrief data to answer that. You can ask about what changed yesterday, active blockers, cross-team dependencies, sprint tasks, or authorized performance records.",
+            "citations": [],
+            "insufficient_data": True
+        }
+

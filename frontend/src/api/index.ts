@@ -30,7 +30,9 @@ import {
   DependencyItem,
   DependencySummaryResponse,
   DependencyListResponse,
-  CreateTaskDependencyRequest
+  CreateTaskDependencyRequest,
+  AssistantChatRequest,
+  AssistantChatResponse
 } from '../types';
 
 const API_BASE = '/api';
@@ -1002,6 +1004,22 @@ export async function deleteDependency(dependencyId: string): Promise<{ ok: bool
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Failed to delete dependency' }));
     const error: any = new Error(err.detail || 'Failed to delete dependency');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+// --- Phase 9 Ask SyncBrief Assistant API ---
+export async function sendAssistantMessage(data: AssistantChatRequest): Promise<AssistantChatResponse> {
+  const res = await fetch(`${API_BASE}/assistant/chat`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to contact SyncBrief Assistant' }));
+    const error: any = new Error(err.detail || 'Failed to contact SyncBrief Assistant');
     error.status = res.status;
     throw error;
   }

@@ -42,3 +42,15 @@ class AIProvider(ABC):
         """Analyze team progress, blockers, risks, and manager actions since previous working day."""
         pass
 
+    @abstractmethod
+    async def ask_syncbrief(
+        self,
+        context_data: Dict[str, Any],
+        user_message: str,
+        conversation_history: List[Dict[str, str]],
+        user_role: str,
+        user_name: str
+    ) -> Dict[str, Any]:
+        """Answer user questions strictly grounded in authorized SyncBrief data with citations."""
+        pass
+

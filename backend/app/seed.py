@@ -5,7 +5,7 @@ from backend.app.auth_utils import hash_password
 from backend.app.database import SessionLocal, Base, engine
 from backend.app.models import (
     Tenant, User, Channel, Message, Checkin, Blocker, Digest, AuditLog, SystemSetting, Sprint, Task,
-    PerformanceCycle, PerformanceGoal
+    PerformanceCycle, PerformanceGoal, TaskDependency
 )
 from backend.app.integrations.teams_cards import TeamsCardGenerator
 from backend.app.integrations.azure_devops import devops_client

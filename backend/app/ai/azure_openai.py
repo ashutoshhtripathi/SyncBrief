@@ -186,3 +186,71 @@ class AzureOpenAIProvider(AIProvider):
 
         return await self.mock_fallback.analyze_what_changed(delta_context)
 
+    async def ask_syncbrief(
+        self,
+        context_data: Dict[str, Any],
+        user_message: str,
+        conversation_history: List[Dict[str, str]],
+        user_role: str,
+        user_name: str
+    ) -> Dict[str, Any]:
+        """Ask SyncBrief assistant powered by Azure OpenAI with fallback to MockProvider."""
+        if not self.client:
+            return await self.mock_fallback.ask_syncbrief(
+                context_data, user_message, conversation_history, user_role, user_name
+            )
+
+        try:
+            system_prompt = (
+                "You are SyncBrief, an enterprise work-intelligence assistant.\n"
+                "Rules:\n"
+                "1. Answer only from supplied verified context.\n"
+                "2. Never invent facts.\n"
+                "3. Never invent citations.\n"
+                "4. Never reveal information outside supplied authorized context.\n"
+                "5. Never expose private manager notes unless present in authorized context.\n"
+                "6. If evidence is insufficient, say so.\n"
+                "7. Do not make promotion decisions.\n"
+                "8. Do not recommend salary increases.\n"
+                "9. Do not recommend termination.\n"
+                "10. Do not assign subjective employee ratings.\n"
+                "11. Keep factual statements traceable to supplied sources.\n\n"
+                "Format your response strictly as a JSON object with this exact structure:\n"
+                "{\n"
+                '  "answer": "Clear, professional, concise response answering the user\'s question",\n'
+                '  "citations": [{"source_type": "task|blocker|dependency|goal|checkin|sprint", "source_id": "...", "title": "...", "author_or_owner": "...", "excerpt": "...", "timestamp": "..."}],\n'
+                '  "insufficient_data": false\n'
+                "}"
+            )
+
+            messages = [{"role": "system", "content": system_prompt}]
+            for turn in conversation_history[-4:]:
+                role = "assistant" if turn.get("role") == "assistant" else "user"
+                messages.append({"role": role, "content": turn.get("content", "")})
+
+            user_prompt = (
+                f"User: {user_name} (Role: {user_role})\n"
+                f"Question: {user_message}\n\n"
+                f"Verified Authorized Context:\n"
+                f"{json.dumps(context_data, indent=2, default=str)}"
+            )
+            messages.append({"role": "user", "content": user_prompt})
+
+            response = await self.client.chat.completions.create(
+                model=self.deployment,
+                messages=messages,
+                response_format={"type": "json_object"},
+                temperature=0.1
+            )
+            content = response.choices[0].message.content
+            data = json.loads(content)
+            if isinstance(data, dict) and "answer" in data:
+                return data
+
+        except Exception as e:
+            logger.error(f"Azure OpenAI assistant chat error, falling back to mock: {e}")
+
+        return await self.mock_fallback.ask_syncbrief(
+            context_data, user_message, conversation_history, user_role, user_name
+        )
+

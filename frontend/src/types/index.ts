@@ -820,4 +820,26 @@ export interface CreateTaskDependencyRequest {
   notes?: string;
 }
 
+// --- Phase 9 Ask SyncBrief Assistant Types ---
+export interface AssistantChatRequest {
+  message: string;
+  conversation_id?: string;
+}
+
+export interface AssistantChatResponse {
+  answer: string;
+  citations: EvidenceCitation[];
+  conversation_id: string;
+  insufficient_data: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  citations?: EvidenceCitation[];
+  insufficient_data?: boolean;
+  timestamp: string;
+}
+
 

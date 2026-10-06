@@ -137,21 +137,21 @@ export const AppraisalPage: React.FC = () => {
   };
 
   const employees = report?.employees || [];
-  const teamTotalPoints = employees.reduce((acc, e) => acc + e.total_points, 0);
+  const teamTotalPoints = employees.reduce((acc, e) => acc + (Number.isFinite(e.total_points) ? e.total_points : 0), 0);
   const avgOnTimeRate = employees.length > 0
-    ? employees.reduce((acc, e) => acc + e.on_time_rate_pct, 0) / employees.length
+    ? employees.reduce((acc, e) => acc + (Number.isFinite(e.on_time_rate_pct) ? e.on_time_rate_pct : 0), 0) / employees.length
     : 0;
   const avgConsistency = employees.length > 0
-    ? employees.reduce((acc, e) => acc + e.checkin_consistency_pct, 0) / employees.length
+    ? employees.reduce((acc, e) => acc + (Number.isFinite(e.checkin_consistency_pct) ? e.checkin_consistency_pct : 0), 0) / employees.length
     : 0;
 
   // Performance calculations
   const perfItems = perfEvidence?.items || [];
-  const totalAssignedPerf = perfItems.reduce((acc, i) => acc + i.total_assigned_points, 0);
-  const totalEarnedPerf = perfItems.reduce((acc, i) => acc + i.total_earned_points, 0);
-  const totalRemainingPerf = perfItems.reduce((acc, i) => acc + i.total_remaining_points, 0);
+  const totalAssignedPerf = perfItems.reduce((acc, i) => acc + (Number.isFinite(i.total_assigned_points) ? i.total_assigned_points : 0), 0);
+  const totalEarnedPerf = perfItems.reduce((acc, i) => acc + (Number.isFinite(i.total_earned_points) ? i.total_earned_points : 0), 0);
+  const totalRemainingPerf = perfItems.reduce((acc, i) => acc + (Number.isFinite(i.total_remaining_points) ? i.total_remaining_points : 0), 0);
   const avgAchievementPerf = totalAssignedPerf > 0 ? (totalEarnedPerf / totalAssignedPerf) * 100 : 0;
-  const totalCarriedGoals = perfItems.reduce((acc, i) => acc + i.carried_goals_count, 0);
+  const totalCarriedGoals = perfItems.reduce((acc, i) => acc + (Number.isFinite(i.carried_goals_count) ? i.carried_goals_count : 0), 0);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-16">
