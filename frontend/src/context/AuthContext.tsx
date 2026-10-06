@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
-import { getCurrentUser, loginWithCredentials, getStorage } from '../api';
+import { getCurrentUser, loginWithCredentials, getStorage, logoutUser } from '../api';
 
 interface AuthContextType {
   user: User | null;
@@ -71,7 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithOAuthResult = (tokenData: { access_token: string; refresh_token?: string; user: User }) => {
+  const loginWithOAuthResult = useCallback((tokenData: { access_token: string; refresh_token?: string; user: User }) => {
     const storage = getStorage();
     storage?.setItem('syncbrief_token', tokenData.access_token);
     storage?.setItem('syncbrief_user', JSON.stringify(tokenData.user));
@@ -79,9 +79,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storage?.setItem('syncbrief_refresh_token', tokenData.refresh_token);
     }
     setUser(tokenData.user);
-  };
+  }, []);
 
   const logout = () => {
+    logoutUser().catch(() => {});
     const storage = getStorage();
     storage?.removeItem('syncbrief_token');
     storage?.removeItem('syncbrief_user');

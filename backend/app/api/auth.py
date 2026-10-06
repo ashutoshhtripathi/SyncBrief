@@ -184,7 +184,7 @@ def start_oauth(provider: str, redirect_uri: Optional[str] = None):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Google OAuth is not configured on this server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend environment."
             )
-        eff_redirect = redirect_uri or settings.effective_google_redirect_uri
+        eff_redirect = settings.effective_google_redirect_uri if settings.GOOGLE_REDIRECT_URI else (redirect_uri or settings.effective_google_redirect_uri)
         params = {
             "client_id": settings.GOOGLE_CLIENT_ID,
             "redirect_uri": eff_redirect,
@@ -208,7 +208,7 @@ def start_oauth(provider: str, redirect_uri: Optional[str] = None):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Microsoft OAuth is not configured on this server. Please set MICROSOFT_CLIENT_ID in backend environment."
             )
-        eff_redirect = redirect_uri or settings.effective_microsoft_redirect_uri
+        eff_redirect = settings.effective_microsoft_redirect_uri if settings.MICROSOFT_REDIRECT_URI else (redirect_uri or settings.effective_microsoft_redirect_uri)
         code_verifier, code_challenge = generate_pkce_pair()
         tenant = settings.MICROSOFT_TENANT_ID or "common"
         params = {
@@ -289,7 +289,7 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
                 detail="Google OAuth is not configured on this server. Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
             )
 
-        eff_redirect = req.redirect_uri or settings.effective_google_redirect_uri
+        eff_redirect = settings.effective_google_redirect_uri if settings.GOOGLE_REDIRECT_URI else (req.redirect_uri or settings.effective_google_redirect_uri)
         token_url = "https://oauth2.googleapis.com/token"
         token_payload = {
             "code": req.code,
@@ -330,6 +330,7 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
                 )
 
             google_error_code = None
+            resp_text = token_resp.text or ""
             if token_resp.status_code != 200:
                 try:
                     err_json = token_resp.json()
@@ -350,7 +351,7 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
             )
 
             if token_resp.status_code != 200:
-                if google_error_code == "invalid_grant":
+                if google_error_code == "invalid_grant" or "invalid_grant" in resp_text:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Google sign-in expired or was already used. Please try again."
@@ -405,7 +406,7 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
 
         ms_tenant = settings.MICROSOFT_TENANT_ID or "common"
         token_url = f"https://login.microsoftonline.com/{ms_tenant}/oauth2/v2.0/token"
-        eff_redirect = req.redirect_uri or settings.effective_microsoft_redirect_uri
+        eff_redirect = settings.effective_microsoft_redirect_uri if settings.MICROSOFT_REDIRECT_URI else (req.redirect_uri or settings.effective_microsoft_redirect_uri)
         token_payload = {
             "client_id": settings.MICROSOFT_CLIENT_ID,
             "code": req.code,
@@ -447,6 +448,7 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
                 )
 
             ms_error_code = None
+            resp_text = token_resp.text or ""
             if token_resp.status_code != 200:
                 try:
                     err_json = token_resp.json()
@@ -467,7 +469,7 @@ async def oauth_callback(req: OAuthCallbackRequest, db: Session = Depends(get_db
             )
 
             if token_resp.status_code != 200:
-                if ms_error_code == "invalid_grant":
+                if ms_error_code == "invalid_grant" or "invalid_grant" in resp_text:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Microsoft sign-in expired or was already used. Please try again."

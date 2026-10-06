@@ -76,6 +76,17 @@ export function getAuthHeaders(): HeadersInit {
   return headers;
 }
 
+export async function logoutUser(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+  } catch {
+    // Non-blocking: local storage is cleared regardless
+  }
+}
+
 export async function fetchSystemStatus(): Promise<SystemStatus> {
   const res = await fetch(`${API_BASE}/status`);
   if (!res.ok) throw new Error('Failed to fetch status');

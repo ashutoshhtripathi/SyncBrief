@@ -37,8 +37,8 @@ export const OAuthCallbackPage: React.FC = () => {
       const errorParam = searchParams.get('error');
       const errorDesc = searchParams.get('error_description');
 
-      // If already on verify_password step and refreshed without code:
-      if (savedPending && !code) {
+      // If already on verify_password step (e.g. user refreshed the page):
+      if (savedPending) {
         try {
           const parsed = JSON.parse(savedPending);
           if (parsed.pending_token && parsed.email) {
@@ -48,6 +48,9 @@ export const OAuthCallbackPage: React.FC = () => {
               setStep('verify_password');
               setIsProcessing(false);
               setProviderName(parsed.provider === 'microsoft' ? 'Microsoft Entra ID' : 'Google Identity');
+              if (typeof window !== 'undefined' && window.history && location.search) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }
             }
             return;
           }
@@ -70,11 +73,19 @@ export const OAuthCallbackPage: React.FC = () => {
         return;
       }
 
+      const storedProvider = (typeof window !== 'undefined' ? (window.sessionStorage?.getItem('syncbrief_oauth_provider') || (state ? window.sessionStorage?.getItem(`syncbrief_state_${state}`) : null)) : null) as 'google' | 'microsoft' | null;
+      const provider = storedProvider || (location.pathname.includes('microsoft') ? 'microsoft' : 'google');
+      const providerLabel = provider === 'microsoft' ? 'Microsoft Entra ID' : 'Google Identity';
+      const providerTitle = provider === 'microsoft' ? 'Microsoft' : 'Google';
+      if (isMounted) {
+        setProviderName(providerLabel);
+      }
+
       // Guard: check sessionStorage to prevent browser refresh from resubmitting same code
       const consumedKey = `syncbrief_consumed_code_${code}`;
       if (!inFlightExchanges.has(code) && typeof window !== 'undefined' && window.sessionStorage?.getItem(consumedKey)) {
         if (isMounted) {
-          setError('Google sign-in expired or was already used. Please try again.');
+          setError(`${providerTitle} sign-in expired or was already used. Please try again.`);
           setIsProcessing(false);
         }
         return;
@@ -93,14 +104,10 @@ export const OAuthCallbackPage: React.FC = () => {
         }
       }
 
-      const storedProvider = (typeof window !== 'undefined' ? (window.sessionStorage?.getItem('syncbrief_oauth_provider') || (state ? window.sessionStorage?.getItem(`syncbrief_state_${state}`) : null)) : null) as 'google' | 'microsoft' | null;
-      const provider = storedProvider || (location.pathname.includes('microsoft') ? 'microsoft' : 'google');
-      if (isMounted) {
-        setProviderName(provider === 'microsoft' ? 'Microsoft Entra ID' : 'Google Identity');
-      }
-
       const codeVerifier = typeof window !== 'undefined' ? window.sessionStorage?.getItem('syncbrief_pkce_verifier') || undefined : undefined;
-      const redirectUri = `${window.location.origin}/auth/callback`;
+      const redirectUri = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:5173/auth/callback'
+        : `${window.location.origin}/auth/callback`;
 
       // Deduplicate in-flight exchange request across React StrictMode invocations
       let exchangePromise = inFlightExchanges.get(code);
@@ -141,6 +148,9 @@ export const OAuthCallbackPage: React.FC = () => {
                 provider: provider
               }));
             }
+            if (typeof window !== 'undefined' && window.history && location.search) {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
           }
           return;
         }
@@ -157,10 +167,13 @@ export const OAuthCallbackPage: React.FC = () => {
         navigate('/', { replace: true });
       } catch (err: any) {
         inFlightExchanges.delete(code);
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.removeItem('syncbrief_pending_oauth');
+        }
         if (isMounted) {
           const rawMsg = err?.message || 'Failed to complete OAuth authentication with the backend.';
           if (rawMsg.includes('invalid_grant') || rawMsg.includes('already used') || rawMsg.includes('expired')) {
-            setError('Google sign-in expired or was already used. Please try again.');
+            setError(`${providerTitle} sign-in expired or was already used. Please try again.`);
           } else {
             setError(rawMsg);
           }

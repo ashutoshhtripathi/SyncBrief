@@ -206,6 +206,7 @@ export const OrgHierarchyPage: React.FC = () => {
       full_name: u.full_name,
       email: u.email,
       password: '',
+      confirm_password: '',
       role: u.role,
       title: u.title,
       role_level: u.role_level || 4,
