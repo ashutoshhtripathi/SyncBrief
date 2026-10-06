@@ -20,7 +20,8 @@ import {
   ChevronRight,
   Info,
   Sparkles,
-  Clock
+  Clock,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -36,6 +37,7 @@ import {
   PerformanceAppraisalEvidenceResponse,
   PerformanceAppraisalEvidenceItem
 } from '../types';
+import { PerformanceReviewDossier } from '../components/PerformanceReviewDossier';
 
 export const AppraisalPage: React.FC = () => {
   const { user } = useAuth();
@@ -56,6 +58,17 @@ export const AppraisalPage: React.FC = () => {
   const [isLoadingPerf, setIsLoadingPerf] = useState(true);
   const [perfErrorMsg, setPerfErrorMsg] = useState<string | null>(null);
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<number | null>(null);
+
+  // --- Performance Review Dossier Modal State ---
+  const [reviewDossierUserId, setReviewDossierUserId] = useState<number | null>(null);
+  const [reviewDossierCycleId, setReviewDossierCycleId] = useState<number | undefined>(undefined);
+  const [isDossierOpen, setIsDossierOpen] = useState(false);
+
+  const handleOpenDossier = (targetUserId: number, targetCycleId?: number) => {
+    setReviewDossierUserId(targetUserId);
+    setReviewDossierCycleId(targetCycleId);
+    setIsDossierOpen(true);
+  };
 
   // Load Story Appraisal Report
   useEffect(() => {
@@ -431,9 +444,27 @@ export const AppraisalPage: React.FC = () => {
 
                               {/* Action */}
                               <td className="py-3.5 px-4 text-center">
-                                <span className="text-blue-600 dark:text-blue-400 font-bold text-[11px] hover:underline">
-                                  {isExpanded ? 'Hide' : 'Review'}
-                                </span>
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenDossier(empId, perfEvidence?.cycle_id);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold text-[11px] border border-blue-200 dark:border-blue-800 shadow-xs transition"
+                                    title="Open Performance Review Dossier"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span>Prepare Review</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpand(empId)}
+                                    className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-semibold text-[11px]"
+                                  >
+                                    {isExpanded ? 'Hide' : 'Goals'}
+                                  </button>
+                                </div>
                               </td>
                             </tr>
 
@@ -727,15 +758,26 @@ export const AppraisalPage: React.FC = () => {
 
                             {/* Evaluation Badge */}
                             <td className="py-3.5 px-4 text-center">
-                              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                                isExceeds
-                                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300'
-                                  : isMeets
-                                  ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300'
-                                  : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300'
-                              }`}>
-                                {emp.rating_category}
-                              </span>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                  isExceeds
+                                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300'
+                                    : isMeets
+                                    ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300'
+                                    : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300'
+                                }`}>
+                                  {emp.rating_category}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDossier(emp.user_id)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold text-[10px] border border-blue-200 dark:border-blue-800 transition shadow-xs"
+                                  title="Prepare Performance Review Dossier"
+                                >
+                                  <FileText className="w-2.5 h-2.5" />
+                                  <span>Prepare Review</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -755,6 +797,19 @@ export const AppraisalPage: React.FC = () => {
             </>
           )}
         </div>
+      )}
+
+      {/* Performance Review Dossier Modal */}
+      {reviewDossierUserId && (
+        <PerformanceReviewDossier
+          userId={reviewDossierUserId}
+          cycleId={reviewDossierCycleId}
+          isOpen={isDossierOpen}
+          onClose={() => {
+            setIsDossierOpen(false);
+            setReviewDossierUserId(null);
+          }}
+        />
       )}
     </div>
   );

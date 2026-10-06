@@ -26,6 +26,7 @@ import { WhySyncBriefPage } from './pages/WhySyncBriefPage';
 import { OrgHierarchyPage } from './pages/OrgHierarchyPage';
 import { WhatChangedPage } from './pages/WhatChangedPage';
 import { PerformanceHistoryPage } from './pages/PerformanceHistoryPage';
+import { DependenciesPage } from './pages/DependenciesPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const queryClient = new QueryClient({
@@ -157,6 +158,7 @@ const AppContent: React.FC = () => {
         <Route path="/" element={<LandingPage onOpenQuickAdd={() => setIsQuickAddOpen(true)} />} />
         <Route path="/checkin" element={<CheckinPage />} />
         <Route path="/sprints" element={<SprintBoardPage />} />
+        <Route path="/dependencies" element={<ErrorBoundary fallbackTitle="Dependency Intelligence"><DependenciesPage /></ErrorBoundary>} />
         <Route path="/points" element={<ErrorBoundary fallbackTitle="Points & Goals Service"><MyPointsPage /></ErrorBoundary>} />
         <Route path="/performance-history" element={<ErrorBoundary fallbackTitle="Performance History & Intelligence"><PerformanceHistoryPage /></ErrorBoundary>} />
         <Route path="/what-changed" element={<ErrorBoundary fallbackTitle="What Changed Intelligence"><WhatChangedPage /></ErrorBoundary>} />

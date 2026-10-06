@@ -21,7 +21,8 @@ import {
   CornerDownLeft,
   X,
   History,
-  TrendingUp
+  TrendingUp,
+  GitFork
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -133,6 +134,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: Award,
       action: () => { navigate('/points'); onClose(); },
       shortcut: 'G P',
+    },
+    {
+      id: 'nav-dependencies',
+      category: 'Navigation',
+      title: 'Cross-Team Dependencies',
+      subtitle: 'Deterministic tracking of who is waiting on whom & delivery risk',
+      icon: GitFork,
+      action: () => { navigate('/dependencies'); onClose(); },
+      shortcut: 'G D',
     },
     {
       id: 'nav-performance-history',

@@ -11,7 +11,9 @@ import {
   ShieldCheck,
   Clock,
   User,
-  Quote
+  Quote,
+  Target,
+  GitFork
 } from 'lucide-react';
 import { EvidenceCitation } from '../types';
 
@@ -31,6 +33,12 @@ export const EvidenceCitationBadge: React.FC<EvidenceCitationBadgeProps> = ({
 
   const getSourceIcon = (type: string) => {
     switch (type.toLowerCase()) {
+      case 'dependency':
+      case 'task_dependency':
+        return <GitFork className="w-3 h-3 text-cyan-500 shrink-0" />;
+      case 'goal':
+      case 'performance_goal':
+        return <Target className="w-3 h-3 text-purple-500 shrink-0" />;
       case 'task':
         return <Kanban className="w-3 h-3 text-blue-500 shrink-0" />;
       case 'checkin':

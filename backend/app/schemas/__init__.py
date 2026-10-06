@@ -831,3 +831,194 @@ class TeamPerformanceHistoryResponse(BaseModel):
     is_director: bool
     members: List[TeamPerformanceMemberSummary] = []
 
+# --- Phase 6: Performance Review Intelligence Schemas ---
+
+class ReviewEmployeeInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    full_name: str
+    email: Optional[str] = None
+    role: str
+    role_level: int
+    manager_name: Optional[str] = None
+
+class ReviewCycleInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    cycle_id: int
+    name: str
+    status: str
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+class ReviewCycleComparisonMetrics(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    cycle_id: Optional[int] = None
+    cycle_name: str
+    assigned_points: float = 0.0
+    earned_points: float = 0.0
+    previously_earned_points: float = 0.0
+    lifetime_earned_points: float = 0.0
+    remaining_points: float = 0.0
+    completion_rate_pct: float = 0.0
+    completed_goals_count: int = 0
+    total_goals_count: int = 0
+
+class ReviewPerformanceComparison(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    current_cycle: ReviewCycleComparisonMetrics
+    previous_cycle: Optional[ReviewCycleComparisonMetrics] = None
+    cycle_over_cycle_delta_pct: Optional[float] = None
+    year_to_date_assigned_points: float = 0.0
+    year_to_date_earned_points: float = 0.0
+    year_to_date_completion_pct: float = 0.0
+    yearly_progression: List[YearlyPerformanceSummary] = []
+    trend: PerformanceTrendInfo
+
+class ReviewGoalItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    goal_id: int
+    title: str
+    category: str = "delivery"
+    assigned_points: float
+    previously_earned_points: float
+    cycle_earned_points: float
+    lifetime_earned_points: float
+    remaining_points: float
+    progress: float
+    status: str
+    carried_forward: bool = False
+    carried_from_goal_id: Optional[int] = None
+    source_task_id: Optional[int] = None
+    source_task_title: Optional[str] = None
+    deadline: Optional[datetime] = None
+
+class ReviewOperationalDelivery(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    completed_tasks: int = 0
+    tasks_on_time: int = 0
+    tasks_carried_over: int = 0
+    on_time_delivery_rate_pct: float = 0.0
+    checkin_consistency_pct: float = 0.0
+    checkin_streak: int = 0
+    blockers_raised: int = 0
+    blockers_resolved: int = 0
+    active_blockers: int = 0
+    story_points_total: float = 0.0
+    points_per_sprint: List[Dict[str, Any]] = []
+
+class ReviewDiscussionTopic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    topic: str
+    category: str  # "accomplishment" | "outstanding_goal" | "blocker" | "delivery" | "trend"
+    summary: str
+    evidence: List[EvidenceCitation] = []
+
+class ReviewIntelligence(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    summary: str
+    accomplishments: List[str] = []
+    outstanding_goals: List[str] = []
+    carried_forward_goals: List[str] = []
+    active_blockers: List[str] = []
+    discussion_topics: List[ReviewDiscussionTopic] = []
+
+class PerformanceReviewNoteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Optional[int] = None
+    tenant_id: int
+    cycle_id: int
+    user_id: int
+    manager_id: int
+    manager_name: Optional[str] = None
+    preparation_notes: str = ""
+    discussion_agenda: str = ""
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class PerformanceReviewNotesUpdate(BaseModel):
+    cycle_id: Optional[int] = None
+    preparation_notes: str = ""
+    discussion_agenda: str = ""
+
+class PerformanceReviewDossierResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    employee: ReviewEmployeeInfo
+    cycle: ReviewCycleInfo
+    comparison: ReviewPerformanceComparison
+    goals: List[ReviewGoalItem] = []
+    operational_delivery: ReviewOperationalDelivery
+    verified_evidence: List[EvidenceCitation] = []
+    review_intelligence: ReviewIntelligence
+    manager_notes: Optional[PerformanceReviewNoteResponse] = None
+    is_manager_or_director: bool = False
+    evidence_note: str = "Consolidated dossier derived strictly from verified SyncBrief database records. Ratings and personnel actions remain the sole responsibility of the human manager."
+
+# --- Phase 7 Cross-Team Dependency Intelligence Schemas ---
+class CreateTaskDependencyRequest(BaseModel):
+    task_id: int
+    depends_on_task_id: int
+    dependency_type: str = "blocks"
+    notes: Optional[str] = None
+
+class DependencyStatusUpdate(BaseModel):
+    status: str
+
+class DependencyItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    dependency_id: str
+    source_type: str = "explicit"  # "explicit" | "blocker" | "sync"
+    source_task_id: Optional[int] = None
+    source_task_title: Optional[str] = None
+    source_owner: str = "Unassigned"
+    source_owner_id: Optional[int] = None
+    source_team: str = "Engineering"
+    dependent_task_id: Optional[int] = None
+    dependent_task_title: Optional[str] = None
+    dependency_owner: str = "Unassigned"
+    dependency_owner_id: Optional[int] = None
+    dependency_team: str = "External / Other"
+    summary: str
+    status: str = "open"  # "open" | "in_progress" | "resolved" | "active"
+    severity: str = "medium"  # "critical" | "high" | "medium" | "low"
+    created_at: Optional[str] = None
+    age_days: int = 0
+    is_aging: bool = False
+    is_cross_team: bool = False
+    affected_task_count: int = 1
+    affected_sprint_id: Optional[int] = None
+    affected_sprint_name: Optional[str] = None
+    is_sprint_at_risk: bool = False
+    downstream_impact_summary: str = ""
+    evidence: List[EvidenceCitation] = []
+
+class DependencySummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total_dependencies: int = 0
+    active_dependencies: int = 0
+    critical_count: int = 0
+    high_count: int = 0
+    aging_count: int = 0
+    cross_team_count: int = 0
+    affected_tasks_count: int = 0
+    affected_sprints_count: int = 0
+    teams_involved: List[str] = []
+
+class DependencyListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    summary: DependencySummaryResponse
+    dependencies: List[DependencyItem] = []
+
+

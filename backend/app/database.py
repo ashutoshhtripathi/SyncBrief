@@ -96,6 +96,36 @@ def run_migrations():
             if cols:
                 if "category" not in cols:
                     conn.execute(text("ALTER TABLE performance_goals ADD COLUMN category VARCHAR(50) DEFAULT 'delivery'"))
+
+            # 8. Ensure performance_review_notes exists
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS performance_review_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    cycle_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    manager_id INTEGER NOT NULL,
+                    preparation_notes TEXT DEFAULT '',
+                    discussion_agenda TEXT DEFAULT '',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+
+            # 9. Ensure task_dependencies exists
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS task_dependencies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER NOT NULL DEFAULT 1,
+                    task_id INTEGER NOT NULL,
+                    depends_on_task_id INTEGER NOT NULL,
+                    dependency_type VARCHAR(50) DEFAULT 'blocks',
+                    status VARCHAR(50) DEFAULT 'active',
+                    notes TEXT DEFAULT '',
+                    created_by_id INTEGER,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
             conn.commit()
     except Exception as e:
         print(f"Warning during run_migrations: {e}")

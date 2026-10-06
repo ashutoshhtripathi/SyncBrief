@@ -650,3 +650,174 @@ export interface TeamPerformanceHistoryResponse {
   members: TeamPerformanceMemberSummary[];
 }
 
+// --- Phase 6: Performance Review Intelligence Types ---
+
+export interface ReviewEmployeeInfo {
+  user_id: number;
+  full_name: string;
+  email?: string | null;
+  role: string;
+  role_level: number;
+  manager_name?: string | null;
+}
+
+export interface ReviewCycleInfo {
+  cycle_id: number;
+  name: string;
+  status: string;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+export interface ReviewCycleComparisonMetrics {
+  cycle_id?: number | null;
+  cycle_name: string;
+  assigned_points: number;
+  earned_points: number;
+  previously_earned_points: number;
+  lifetime_earned_points: number;
+  remaining_points: number;
+  completion_rate_pct: number;
+  completed_goals_count: number;
+  total_goals_count: number;
+}
+
+export interface ReviewPerformanceComparison {
+  current_cycle: ReviewCycleComparisonMetrics;
+  previous_cycle?: ReviewCycleComparisonMetrics | null;
+  cycle_over_cycle_delta_pct?: number | null;
+  year_to_date_assigned_points: number;
+  year_to_date_earned_points: number;
+  year_to_date_completion_pct: number;
+  yearly_progression: YearlyPerformanceSummary[];
+  trend: PerformanceTrendInfo;
+}
+
+export interface ReviewGoalItem {
+  goal_id: number;
+  title: string;
+  category: string;
+  assigned_points: number;
+  previously_earned_points: number;
+  cycle_earned_points: number;
+  lifetime_earned_points: number;
+  remaining_points: number;
+  progress: number;
+  status: string;
+  carried_forward: boolean;
+  carried_from_goal_id?: number | null;
+  source_task_id?: number | null;
+  source_task_title?: string | null;
+  deadline?: string | null;
+}
+
+export interface ReviewOperationalDelivery {
+  completed_tasks: number;
+  tasks_on_time: number;
+  tasks_carried_over: number;
+  on_time_delivery_rate_pct: number;
+  checkin_consistency_pct: number;
+  checkin_streak: number;
+  blockers_raised: number;
+  blockers_resolved: number;
+  active_blockers: number;
+  story_points_total: number;
+  points_per_sprint: Array<{ sprint: string; points: number }>;
+}
+
+export interface ReviewDiscussionTopic {
+  topic: string;
+  category: string;
+  summary: string;
+  evidence: EvidenceCitation[];
+}
+
+export interface ReviewIntelligence {
+  summary: string;
+  accomplishments: string[];
+  outstanding_goals: string[];
+  carried_forward_goals: string[];
+  active_blockers: string[];
+  discussion_topics: ReviewDiscussionTopic[];
+}
+
+export interface PerformanceReviewNote {
+  id?: number | null;
+  tenant_id: number;
+  cycle_id: number;
+  user_id: number;
+  manager_id: number;
+  manager_name?: string | null;
+  preparation_notes: string;
+  discussion_agenda: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PerformanceReviewDossier {
+  employee: ReviewEmployeeInfo;
+  cycle: ReviewCycleInfo;
+  comparison: ReviewPerformanceComparison;
+  goals: ReviewGoalItem[];
+  operational_delivery: ReviewOperationalDelivery;
+  verified_evidence: EvidenceCitation[];
+  review_intelligence: ReviewIntelligence;
+  manager_notes?: PerformanceReviewNote | null;
+  is_manager_or_director: boolean;
+  evidence_note: string;
+}
+
+// --- Phase 7 Cross-Team Dependency Intelligence Types ---
+export interface DependencyItem {
+  dependency_id: string;
+  source_type: 'explicit' | 'blocker' | 'sync' | string;
+  source_task_id?: number | null;
+  source_task_title?: string | null;
+  source_owner: string;
+  source_owner_id?: number | null;
+  source_team: string;
+  dependent_task_id?: number | null;
+  dependent_task_title?: string | null;
+  dependency_owner: string;
+  dependency_owner_id?: number | null;
+  dependency_team: string;
+  summary: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'active' | string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | string;
+  created_at?: string | null;
+  age_days: number;
+  is_aging: boolean;
+  is_cross_team: boolean;
+  affected_task_count: number;
+  affected_sprint_id?: number | null;
+  affected_sprint_name?: string | null;
+  is_sprint_at_risk: boolean;
+  downstream_impact_summary: string;
+  evidence: EvidenceCitation[];
+}
+
+export interface DependencySummaryResponse {
+  total_dependencies: number;
+  active_dependencies: number;
+  critical_count: number;
+  high_count: number;
+  aging_count: number;
+  cross_team_count: number;
+  affected_tasks_count: number;
+  affected_sprints_count: number;
+  teams_involved: string[];
+}
+
+export interface DependencyListResponse {
+  summary: DependencySummaryResponse;
+  dependencies: DependencyItem[];
+}
+
+export interface CreateTaskDependencyRequest {
+  task_id: number;
+  depends_on_task_id: number;
+  dependency_type?: string;
+  notes?: string;
+}
+
+

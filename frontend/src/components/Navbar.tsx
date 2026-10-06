@@ -22,7 +22,8 @@ import {
   Search,
   Plus,
   History,
-  TrendingUp
+  TrendingUp,
+  GitFork
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -70,6 +71,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: 'Today', path: '/', icon: CalendarCheck, desc: "Team's daily standup hub" },
     ...(!isDirector ? [{ label: 'Check-in', path: '/checkin', icon: Sparkles, desc: '60s async update with task link', badge: '60s' }] : []),
     { label: 'Sprints', path: '/sprints', icon: Kanban, desc: 'Sprint Kanban board & story points' },
+    { label: 'Dependencies', path: '/dependencies', icon: GitFork, desc: 'Cross-team dependencies & impact' },
     { label: 'Blockers', path: '/blockers', icon: Kanban, desc: 'AI blocker board & Azure DevOps' },
     { label: 'Digest', path: '/digest', icon: FileText, desc: 'AI summary & verifiable citations' },
     ...(!isDirector ? [{ label: 'My Points', path: '/points', icon: Award, desc: 'Points earned & delivery velocity' }] : []),

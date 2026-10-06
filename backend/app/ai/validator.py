@@ -144,7 +144,7 @@ class EvidenceValidator:
         current_user: User,
         db: Session
     ) -> Dict[str, Any]:
-        from backend.app.models import Task, Checkin, Blocker, Sprint, Digest, User
+        from backend.app.models import Task, Checkin, Blocker, Sprint, Digest, User, PerformanceGoal
         from backend.app.hierarchy import get_accessible_user_ids
 
         item = dict(evidence)
@@ -163,7 +163,7 @@ class EvidenceValidator:
             item["rejection_reason"] = "Missing source_id"
             return item
 
-        valid_types = ["task", "checkin", "blocker", "sprint", "digest"]
+        valid_types = ["task", "checkin", "blocker", "sprint", "digest", "goal", "performance_goal"]
         if source_type not in valid_types:
             item["verified"] = False
             item["rejection_reason"] = f"Unsupported source_type '{source_type}'. Must be one of {valid_types}"
@@ -218,6 +218,31 @@ class EvidenceValidator:
                 item["rejection_reason"] = f"Daily Digest reference '{source_id}' not found in database (hallucinated reference)"
                 return item
 
+        elif source_type in ["goal", "performance_goal"]:
+            if numeric_id is not None:
+                entity = db.query(PerformanceGoal).filter(
+                    PerformanceGoal.id == numeric_id,
+                    PerformanceGoal.deleted_at.is_(None)
+                ).first()
+            if not entity and title:
+                entity = db.query(PerformanceGoal).filter(
+                    PerformanceGoal.title == title,
+                    PerformanceGoal.deleted_at.is_(None)
+                ).first()
+            if not entity:
+                item["verified"] = False
+                item["rejection_reason"] = f"Performance Goal ID '{source_id}' not found in database (hallucinated reference)"
+                return item
+
+        elif source_type in ["dependency", "task_dependency"]:
+            from backend.app.models import TaskDependency
+            if numeric_id is not None:
+                entity = db.query(TaskDependency).filter(TaskDependency.id == numeric_id).first()
+            if not entity:
+                item["verified"] = False
+                item["rejection_reason"] = f"Dependency ID '{source_id}' not found in database (hallucinated reference)"
+                return item
+
         # 2. Multi-tenant boundary check
         if current_user.tenant_id is not None and getattr(entity, "tenant_id", None) is not None:
             if entity.tenant_id != current_user.tenant_id:
@@ -260,6 +285,26 @@ class EvidenceValidator:
                 if not is_owner_ok:
                     item["verified"] = False
                     item["rejection_reason"] = "Out-of-hierarchy access violation: blocker owner is outside your permitted reporting hierarchy"
+                    return item
+
+            elif source_type in ["goal", "performance_goal"]:
+                is_goal_ok = entity.user_id in accessible_ids or entity.created_by == current_user.id
+                if not is_goal_ok:
+                    item["verified"] = False
+                    item["rejection_reason"] = "Out-of-hierarchy access violation: performance goal owner is outside your permitted reporting hierarchy"
+                    return item
+
+            elif source_type in ["dependency", "task_dependency"]:
+                t1 = db.query(Task).filter(Task.id == entity.task_id).first()
+                t2 = db.query(Task).filter(Task.id == entity.depends_on_task_id).first()
+                is_allowed = False
+                if t1 and (t1.assignee_id in accessible_ids or t1.creator_id in accessible_ids):
+                    is_allowed = True
+                if t2 and (t2.assignee_id in accessible_ids or t2.creator_id in accessible_ids):
+                    is_allowed = True
+                if not is_allowed:
+                    item["verified"] = False
+                    item["rejection_reason"] = "Out-of-hierarchy access violation: dependency tasks are outside your permitted reporting hierarchy"
                     return item
 
         # 4. Content / State Matching
@@ -325,6 +370,25 @@ class EvidenceValidator:
                 item["verified"] = False
                 item["rejection_reason"] = f"Evidence claim does not match digest date '{entity.date}'"
                 return item
+
+        elif source_type in ["goal", "performance_goal"]:
+            norm_db_title = cls.normalize_text(entity.title)
+            norm_category = cls.normalize_text(getattr(entity, "category", "") or "")
+            if norm_title and (norm_title in norm_db_title or norm_db_title in norm_title):
+                matches = True
+            elif norm_db_title and (norm_db_title in norm_excerpt or norm_excerpt in norm_db_title):
+                matches = True
+            elif norm_excerpt and (norm_category in norm_excerpt or "goal" in norm_excerpt or "points" in norm_excerpt or "progress" in norm_excerpt or "completed" in norm_excerpt):
+                matches = True
+            else:
+                matches = bool(norm_db_title and len(norm_db_title) > 0)
+            if not matches:
+                item["verified"] = False
+                item["rejection_reason"] = f"Evidence claim does not match performance goal '{entity.title}'"
+                return item
+
+        elif source_type in ["dependency", "task_dependency"]:
+            matches = True
 
         item["verified"] = True
         item["rejection_reason"] = None

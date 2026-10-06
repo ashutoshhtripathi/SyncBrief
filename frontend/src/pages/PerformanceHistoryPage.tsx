@@ -20,7 +20,8 @@ import {
   User as UserIcon,
   HelpCircle,
   BarChart3,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -34,6 +35,7 @@ import {
   QuarterPerformanceDetail,
   PerformanceGoal
 } from '../types';
+import { PerformanceReviewDossier } from '../components/PerformanceReviewDossier';
 
 export const PerformanceHistoryPage: React.FC = () => {
   const { user } = useAuth();
@@ -57,6 +59,9 @@ export const PerformanceHistoryPage: React.FC = () => {
 
   // Selected quarter for detailed goal inspection
   const [selectedQuarterCycleId, setSelectedQuarterCycleId] = useState<number | null>(null);
+
+  // Review Dossier Modal
+  const [isDossierOpen, setIsDossierOpen] = useState(false);
 
   // Load My Performance or Subordinate Performance
   useEffect(() => {
@@ -135,39 +140,52 @@ export const PerformanceHistoryPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Role-Aware View Switcher (for Managers & Directors) */}
-        {hasManagerialScope && (
-          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 self-start lg:self-auto">
-            <button
-              onClick={() => {
-                setActiveTab('my');
-                setSelectedSubordinateId(null);
-              }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'my'
-                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <UserIcon className="w-3.5 h-3.5" />
-              <span>My Performance</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('team');
-                setSelectedSubordinateId(null);
-              }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'team'
-                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Team Performance</span>
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-auto">
+          {/* Review Dossier Entry */}
+          <button
+            type="button"
+            onClick={() => setIsDossierOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 transition flex items-center gap-1.5 shadow-xs"
+            title="Open verified Performance Review Dossier"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Review Dossier</span>
+          </button>
+
+          {/* Role-Aware View Switcher (for Managers & Directors) */}
+          {hasManagerialScope && (
+            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700/80">
+              <button
+                onClick={() => {
+                  setActiveTab('my');
+                  setSelectedSubordinateId(null);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'my'
+                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <UserIcon className="w-3.5 h-3.5" />
+                <span>My Performance</span>
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('team');
+                  setSelectedSubordinateId(null);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'team'
+                    ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Team Performance</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Loading & Error States */}
@@ -645,6 +663,16 @@ export const PerformanceHistoryPage: React.FC = () => {
             </>
           )}
         </div>
+      )}
+
+      {/* Performance Review Dossier Modal */}
+      {isDossierOpen && (
+        <PerformanceReviewDossier
+          userId={selectedSubordinateId !== null ? selectedSubordinateId : (user?.id || 0)}
+          cycleId={selectedQuarterCycleId || undefined}
+          isOpen={isDossierOpen}
+          onClose={() => setIsDossierOpen(false)}
+        />
       )}
     </div>
   );

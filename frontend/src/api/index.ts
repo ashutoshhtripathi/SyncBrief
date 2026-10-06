@@ -24,7 +24,13 @@ import {
   OAuthPasswordVerifyPayload,
   WhatChangedResponse,
   PerformanceHistoryResponse,
-  TeamPerformanceHistoryResponse
+  TeamPerformanceHistoryResponse,
+  PerformanceReviewDossier,
+  PerformanceReviewNote,
+  DependencyItem,
+  DependencySummaryResponse,
+  DependencyListResponse,
+  CreateTaskDependencyRequest
 } from '../types';
 
 const API_BASE = '/api';
@@ -876,3 +882,129 @@ export async function fetchTeamPerformanceHistory(): Promise<TeamPerformanceHist
   }
   return res.json();
 }
+
+// --- Phase 6: Performance Review Intelligence ---
+export async function fetchPerformanceReviewDossier(userId: number, cycleId?: number): Promise<PerformanceReviewDossier> {
+  const qs = cycleId ? `?cycle_id=${cycleId}` : '';
+  const res = await fetch(`${API_BASE}/performance/review/${userId}${qs}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch performance review dossier' }));
+    const error: any = new Error(err.detail || 'Failed to fetch performance review dossier');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function updatePerformanceReviewNotes(
+  userId: number,
+  data: { cycle_id?: number; preparation_notes: string; discussion_agenda: string }
+): Promise<PerformanceReviewNote> {
+  const res = await fetch(`${API_BASE}/performance/review/${userId}/notes`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to update review notes' }));
+    const error: any = new Error(err.detail || 'Failed to update review notes');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+// --- Phase 7: Cross-Team Dependency Intelligence ---
+export async function fetchDependencies(filters?: {
+  status?: string;
+  severity?: string;
+  team?: string;
+  owner?: string;
+  sprint_id?: number;
+  aging?: boolean;
+  cross_team_only?: boolean;
+}): Promise<DependencyListResponse> {
+  const params = new URLSearchParams();
+  if (filters?.status) params.append('status', filters.status);
+  if (filters?.severity) params.append('severity', filters.severity);
+  if (filters?.team) params.append('team', filters.team);
+  if (filters?.owner) params.append('owner', filters.owner);
+  if (filters?.sprint_id) params.append('sprint_id', String(filters.sprint_id));
+  if (filters?.aging !== undefined) params.append('aging', String(filters.aging));
+  if (filters?.cross_team_only !== undefined) params.append('cross_team_only', String(filters.cross_team_only));
+
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_BASE}/dependencies${qs}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch dependencies' }));
+    const error: any = new Error(err.detail || 'Failed to fetch dependencies');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function fetchDependencySummary(): Promise<DependencySummaryResponse> {
+  const res = await fetch(`${API_BASE}/dependencies/summary`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch dependency summary' }));
+    const error: any = new Error(err.detail || 'Failed to fetch dependency summary');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function createDependency(data: CreateTaskDependencyRequest): Promise<DependencyItem> {
+  const res = await fetch(`${API_BASE}/dependencies`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to create dependency' }));
+    const error: any = new Error(err.detail || 'Failed to create dependency');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function updateDependencyStatus(
+  dependencyId: string,
+  status: string
+): Promise<DependencyItem> {
+  const res = await fetch(`${API_BASE}/dependencies/${dependencyId}/status`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to update dependency status' }));
+    const error: any = new Error(err.detail || 'Failed to update dependency status');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function deleteDependency(dependencyId: string): Promise<{ ok: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/dependencies/${dependencyId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to delete dependency' }));
+    const error: any = new Error(err.detail || 'Failed to delete dependency');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+

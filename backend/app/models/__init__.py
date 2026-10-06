@@ -320,3 +320,37 @@ class PerformanceGoal(Base):
     manager = relationship("User", foreign_keys=[created_by])
     source_task = relationship("Task", foreign_keys=[source_task_id])
     carried_from = relationship("PerformanceGoal", remote_side=[id], backref="carried_to_goals")
+
+class PerformanceReviewNote(Base):
+    __tablename__ = "performance_review_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, default=1, index=True)
+    cycle_id = Column(Integer, ForeignKey("performance_cycles.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)       # Employee being reviewed
+    manager_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)    # Manager/author
+    preparation_notes = Column(Text, default="")
+    discussion_agenda = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    cycle = relationship("PerformanceCycle")
+    employee = relationship("User", foreign_keys=[user_id])
+    manager = relationship("User", foreign_keys=[manager_id])
+
+class TaskDependency(Base):
+    __tablename__ = "task_dependencies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, default=1, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False, index=True)               # Blocked / dependent task
+    depends_on_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False, index=True)    # Prerequisite / blocking task
+    dependency_type = Column(String(50), default="blocks")                                      # "blocks", "relates_to"
+    status = Column(String(50), default="active")                                               # "active", "resolved"
+    notes = Column(Text, nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    task = relationship("Task", foreign_keys=[task_id])
+    depends_on_task = relationship("Task", foreign_keys=[depends_on_task_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
