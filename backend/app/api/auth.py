@@ -104,9 +104,23 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     Enforces real account authentication. Issues JWT bearer token enriched with tenant_id.
     """
     email_clean = req.email.lower().strip()
-    # Normalize common alias for Sarah Jenkins
-    if email_clean == "sara.jenkins@syncbrief.ai":
-        email_clean = "sarah.jenkins@syncbrief.ai"
+    alias_map = {
+        "sara.jenkins@syncbrief.ai": "sarah.jenkins@syncbrief.ai",
+        "sarah": "sarah.jenkins@syncbrief.ai",
+        "sarah.jenkins": "sarah.jenkins@syncbrief.ai",
+        "vikram": "vikram.joshi@syncbrief.ai",
+        "vikram.joshi": "vikram.joshi@syncbrief.ai",
+        "priya": "priya.sharma@syncbrief.ai",
+        "priya.sharma": "priya.sharma@syncbrief.ai",
+        "alex": "alex.rivera@syncbrief.ai",
+        "alex.rivera": "alex.rivera@syncbrief.ai",
+        "james": "james.wilson@syncbrief.ai",
+        "james.wilson": "james.wilson@syncbrief.ai",
+    }
+    if email_clean in alias_map:
+        email_clean = alias_map[email_clean]
+    elif "@" not in email_clean:
+        email_clean = f"{email_clean}@syncbrief.ai"
 
     user = db.query(User).filter(User.email == email_clean, User.deleted_at.is_(None)).first()
     if not user or not verify_password(req.password, user.hashed_password):

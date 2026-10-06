@@ -5,8 +5,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { AppLayout } from './components/layout/AppLayout';
-import { TourGuide } from './components/TourGuide';
-import { DemoScenarioButton } from './components/DemoScenarioButton';
 import { CommandPalette } from './components/CommandPalette';
 import { QuickAddTaskModal } from './components/QuickAddTaskModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -41,7 +39,6 @@ const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isTourOpen, setIsTourOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
@@ -150,7 +147,6 @@ const AppContent: React.FC = () => {
       onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       onOpenQuickAdd={() => setIsQuickAddOpen(true)}
       onOpenShortcuts={() => setIsShortcutsOpen(true)}
-      onStartTour={() => setIsTourOpen(true)}
     >
       <Routes>
         <Route path="/" element={<LandingPage onOpenQuickAdd={() => setIsQuickAddOpen(true)} />} />
@@ -172,7 +168,6 @@ const AppContent: React.FC = () => {
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-        onStartTour={() => setIsTourOpen(true)}
       />
 
       <QuickAddTaskModal
@@ -184,9 +179,6 @@ const AppContent: React.FC = () => {
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
       />
-
-      <DemoScenarioButton />
-      <TourGuide isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
     </AppLayout>
   );
 };

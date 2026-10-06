@@ -15,7 +15,6 @@ import {
   Plus, 
   Sun, 
   Moon, 
-  HelpCircle, 
   ArrowRight,
   LogOut,
   Zap,
@@ -30,7 +29,7 @@ interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenQuickAdd: () => void;
-  onStartTour: () => void;
+  onStartTour?: () => void;
 }
 
 interface CommandItem {
@@ -47,7 +46,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   isOpen,
   onClose,
   onOpenQuickAdd,
-  onStartTour,
 }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -208,17 +206,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         toggleTheme();
         toast.info(`Switched to ${theme === 'dark' ? 'Light' : 'Dark'} mode`);
         onClose();
-      },
-    },
-    {
-      id: 'action-tour',
-      category: 'Actions',
-      title: 'Take Product Tour',
-      subtitle: 'Step-by-step interactive walk-through',
-      icon: HelpCircle,
-      action: () => {
-        onClose();
-        onStartTour();
       },
     },
     {

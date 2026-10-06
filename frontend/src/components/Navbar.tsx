@@ -10,7 +10,6 @@ import {
   Settings, 
   Sun, 
   Moon, 
-  HelpCircle, 
   Cpu, 
   LogOut,
   Building2,
@@ -29,13 +28,12 @@ import { fetchSystemStatus } from '../api';
 import { SystemStatus } from '../types';
 
 interface NavbarProps {
-  onStartTour: () => void;
+  onStartTour?: () => void;
   onOpenCommandPalette?: () => void;
   onOpenQuickAdd?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ 
-  onStartTour,
   onOpenCommandPalette,
   onOpenQuickAdd,
 }) => {
@@ -109,14 +107,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
           )}
-          <button
-            onClick={onStartTour}
-            className="flex items-center gap-1 text-[11px] bg-white/15 hover:bg-white/25 px-2.5 py-0.5 rounded-full text-white transition-colors"
-            title="Start Interactive Tour"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-sky-200" />
-            <span className="font-semibold">Take Tour</span>
-          </button>
         </div>
       </div>
 

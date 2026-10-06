@@ -24,6 +24,18 @@ from backend.app.middleware import SecurityHeadersMiddleware, RateLimitMiddlewar
 Base.metadata.create_all(bind=engine)
 run_migrations()
 
+# Auto-seed if database has 0 users so email/password authentication always succeeds
+try:
+    from backend.app.database import SessionLocal
+    from backend.app.models import User
+    with SessionLocal() as db_session:
+        if db_session.query(User).count() == 0:
+            from backend.app.seed import seed_database
+            seed_database()
+except Exception as _seed_err:
+    import logging
+    logging.getLogger("uvicorn.error").warning(f"Startup auto-seed check: {_seed_err}")
+
 app = FastAPI(
     title="SyncBrief AI Backend API",
     description="Async standup updates with verifiable chat evidence citations for distributed teams. Microsoft Innovate 2026 Hackathon.",

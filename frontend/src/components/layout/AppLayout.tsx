@@ -21,7 +21,6 @@ import {
   Menu, 
   X, 
   Keyboard, 
-  HelpCircle, 
   LogOut,
   Building2,
   ChevronDown,
@@ -39,7 +38,7 @@ interface AppLayoutProps {
   onOpenCommandPalette: () => void;
   onOpenQuickAdd: () => void;
   onOpenShortcuts: () => void;
-  onStartTour: () => void;
+  onStartTour?: () => void;
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
@@ -47,7 +46,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onOpenCommandPalette,
   onOpenQuickAdd,
   onOpenShortcuts,
-  onStartTour,
 }) => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -220,7 +218,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           </div>
         </div>
 
-        {/* Sidebar Footer: Keyboard Shortcut Hint & Tour */}
+        {/* Sidebar Footer: Keyboard Shortcut Hint */}
         <div className="p-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
           <button
             onClick={onOpenShortcuts}
@@ -236,17 +234,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 ?
               </kbd>
             )}
-          </button>
-
-          <button
-            onClick={onStartTour}
-            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
-              isCollapsed ? 'justify-center px-0' : ''
-            }`}
-            title="Product Tour"
-          >
-            <HelpCircle className="w-4 h-4 shrink-0 text-slate-400" />
-            {!isCollapsed && <span>Guided Tour</span>}
           </button>
         </div>
       </aside>
