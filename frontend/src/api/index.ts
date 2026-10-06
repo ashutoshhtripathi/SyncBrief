@@ -21,7 +21,10 @@ import {
   OAuthConfig,
   OAuthCallbackPayload,
   OAuthPendingResponse,
-  OAuthPasswordVerifyPayload
+  OAuthPasswordVerifyPayload,
+  WhatChangedResponse,
+  PerformanceHistoryResponse,
+  TeamPerformanceHistoryResponse
 } from '../types';
 
 const API_BASE = '/api';
@@ -811,5 +814,65 @@ export async function fetchPerformanceAppraisalEvidence(cycleId?: number): Promi
     headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error('Failed to fetch performance appraisal evidence');
+  return res.json();
+}
+
+export async function fetchWhatChanged(
+  targetDate?: string,
+  compareDate?: string
+): Promise<WhatChangedResponse> {
+  const params = new URLSearchParams();
+  if (targetDate) params.append('target_date', targetDate);
+  if (compareDate) params.append('compare_date', compareDate);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_BASE}/what-changed${qs}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch What Changed summary' }));
+    const error: any = new Error(err.detail || 'Failed to fetch What Changed summary');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+// --- Phase 5: Performance History & Intelligence ---
+export async function fetchMyPerformanceHistory(): Promise<PerformanceHistoryResponse> {
+  const res = await fetch(`${API_BASE}/performance/history`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch performance history' }));
+    const error: any = new Error(err.detail || 'Failed to fetch performance history');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function fetchUserPerformanceHistory(userId: number): Promise<PerformanceHistoryResponse> {
+  const res = await fetch(`${API_BASE}/performance/history/user/${userId}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch user performance history' }));
+    const error: any = new Error(err.detail || 'Failed to fetch user performance history');
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function fetchTeamPerformanceHistory(): Promise<TeamPerformanceHistoryResponse> {
+  const res = await fetch(`${API_BASE}/performance/history/team`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch team performance history' }));
+    const error: any = new Error(err.detail || 'Failed to fetch team performance history');
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }

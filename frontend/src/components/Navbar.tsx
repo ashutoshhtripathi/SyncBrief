@@ -20,7 +20,9 @@ import {
   Network,
   ChevronDown,
   Search,
-  Plus
+  Plus,
+  History,
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -71,7 +73,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: 'Blockers', path: '/blockers', icon: Kanban, desc: 'AI blocker board & Azure DevOps' },
     { label: 'Digest', path: '/digest', icon: FileText, desc: 'AI summary & verifiable citations' },
     ...(!isDirector ? [{ label: 'My Points', path: '/points', icon: Award, desc: 'Points earned & delivery velocity' }] : []),
+    { label: 'My Performance', path: '/performance-history', icon: TrendingUp, desc: 'Quarterly & yearly performance history' },
     ...(isDirector || isManager ? [
+      { label: 'What Changed', path: '/what-changed', icon: History, desc: 'What Changed Since Yesterday', badge: 'AI' },
       { label: 'Appraisal', path: '/appraisal', icon: Users, desc: 'Subordinate team performance review' },
       { label: 'Org & Team', path: '/hierarchy', icon: Network, desc: 'Reporting structure & team directory' },
     ] : []),

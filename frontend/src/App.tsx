@@ -24,6 +24,8 @@ import { MyPointsPage } from './pages/MyPointsPage';
 import { AppraisalPage } from './pages/AppraisalPage';
 import { WhySyncBriefPage } from './pages/WhySyncBriefPage';
 import { OrgHierarchyPage } from './pages/OrgHierarchyPage';
+import { WhatChangedPage } from './pages/WhatChangedPage';
+import { PerformanceHistoryPage } from './pages/PerformanceHistoryPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const queryClient = new QueryClient({
@@ -108,6 +110,9 @@ const AppContent: React.FC = () => {
         } else if (e.key === 'a' || e.key === 'A') {
           e.preventDefault();
           navigate('/appraisal');
+        } else if (e.key === 'w' || e.key === 'W') {
+          e.preventDefault();
+          navigate('/what-changed');
         }
         lastKeyRef.current = '';
         return;
@@ -153,6 +158,8 @@ const AppContent: React.FC = () => {
         <Route path="/checkin" element={<CheckinPage />} />
         <Route path="/sprints" element={<SprintBoardPage />} />
         <Route path="/points" element={<ErrorBoundary fallbackTitle="Points & Goals Service"><MyPointsPage /></ErrorBoundary>} />
+        <Route path="/performance-history" element={<ErrorBoundary fallbackTitle="Performance History & Intelligence"><PerformanceHistoryPage /></ErrorBoundary>} />
+        <Route path="/what-changed" element={<ErrorBoundary fallbackTitle="What Changed Intelligence"><WhatChangedPage /></ErrorBoundary>} />
         <Route path="/appraisal" element={<AppraisalPage />} />
         <Route path="/why-syncbrief" element={<WhySyncBriefPage />} />
         <Route path="/hierarchy" element={<OrgHierarchyPage />} />

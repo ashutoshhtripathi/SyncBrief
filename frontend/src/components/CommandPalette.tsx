@@ -19,7 +19,9 @@ import {
   LogOut,
   Zap,
   CornerDownLeft,
-  X
+  X,
+  History,
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -132,15 +134,35 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       action: () => { navigate('/points'); onClose(); },
       shortcut: 'G P',
     },
-    ...(isManagerOrDirector ? [{
-      id: 'nav-appraisal',
-      category: 'Navigation' as const,
-      title: 'Team Performance Appraisal',
-      subtitle: 'Subordinate review matrix with PDF & CSV export',
-      icon: Users,
-      action: () => { navigate('/appraisal'); onClose(); },
-      shortcut: 'G A',
-    }] : []),
+    {
+      id: 'nav-performance-history',
+      category: 'Navigation',
+      title: 'My Performance History',
+      subtitle: 'Long-term quarterly performance cycles & yearly trend',
+      icon: TrendingUp,
+      action: () => { navigate('/performance-history'); onClose(); },
+      shortcut: 'G H',
+    },
+    ...(isManagerOrDirector ? [
+      {
+        id: 'nav-what-changed',
+        category: 'Navigation' as const,
+        title: 'What Changed Since Yesterday',
+        subtitle: 'Verified working-day progress, blockers & manager attention',
+        icon: History,
+        action: () => { navigate('/what-changed'); onClose(); },
+        shortcut: 'G W',
+      },
+      {
+        id: 'nav-appraisal',
+        category: 'Navigation' as const,
+        title: 'Team Performance Appraisal',
+        subtitle: 'Subordinate review matrix with PDF & CSV export',
+        icon: Users,
+        action: () => { navigate('/appraisal'); onClose(); },
+        shortcut: 'G A',
+      }
+    ] : []),
     {
       id: 'nav-why',
       category: 'Navigation' as const,

@@ -36,9 +36,10 @@ import {
   fetchMyReports,
   updateTask,
   updateBlockerStatus,
-  syncToDevOps
+  syncToDevOps,
+  fetchWhatChanged
 } from '../api';
-import { Task, Sprint, Checkin, Blocker, User } from '../types';
+import { Task, Sprint, Checkin, Blocker, User, WhatChangedResponse } from '../types';
 import { CitationBadge } from './CitationBadge';
 
 interface TodayDashboardProps {
@@ -57,6 +58,7 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [subordinates, setSubordinates] = useState<User[]>([]);
   const [allCheckins, setAllCheckins] = useState<Checkin[]>([]);
+  const [whatChangedSummary, setWhatChangedSummary] = useState<WhatChangedResponse | null>(null);
 
   // Inline editing state for task
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
@@ -193,10 +195,11 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
       setTodayCheckin(myLatestCheckin || null);
 
       if (isManagerOrDirector) {
-        // Manager view: fetch reports and tasks for reports
+        // Manager view: fetch reports, tasks for reports, and What Changed delta
+        fetchWhatChanged().then(setWhatChangedSummary).catch(() => {});
         try {
           const reports = await fetchMyReports();
-          setSubordinates(reports);
+          setSubordinates(Array.isArray(reports) ? reports : []);
           if (active) {
             const teamTasks = await fetchTasks({ sprint_id: active.id });
             setTasks(teamTasks);
@@ -849,6 +852,83 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({ onOpenQuickAdd }
               <p className="text-xs text-slate-500">
                 Formula: Difficulty &times; (1.0 &minus; 0.25 &times; carry_over)
               </p>
+            </div>
+          </div>
+
+          {/* Compact "What Changed Since Yesterday?" Entry Card */}
+          <div className="p-5 rounded-2xl bg-gradient-to-br from-blue-50/90 via-sky-50/50 to-indigo-50/40 dark:from-slate-900 dark:via-blue-950/20 dark:to-slate-900 border border-blue-200/80 dark:border-blue-900/50 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-blue-900 dark:text-blue-300">
+                    What Changed Since Yesterday
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {whatChangedSummary?.is_weekend_lookback
+                      ? 'Comparing with Friday (Weekend Lookback)'
+                      : 'Verified team working-day delta'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200 border border-blue-200 dark:border-blue-900">
+                AI Delta
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <div className="text-base font-extrabold text-slate-900 dark:text-white">
+                  {whatChangedSummary?.progress?.meaningful_task_progress?.length ?? 0}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  tasks progressed
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <div className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                  {whatChangedSummary?.progress?.completed_work?.length ?? 0}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  task{(whatChangedSummary?.progress?.completed_work?.length === 1) ? '' : 's'} completed
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <div className="text-base font-extrabold text-amber-600 dark:text-amber-400">
+                  {whatChangedSummary?.insufficient_data?.missing_checkins?.length ?? 0}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  missing check-ins
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                <div className="text-base font-extrabold text-rose-600 dark:text-rose-400">
+                  {((whatChangedSummary?.blockers?.new_blockers?.length ?? 0) + (whatChangedSummary?.blockers?.existing_unresolved_blockers?.length ?? 0))}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  {((whatChangedSummary?.blockers?.new_blockers?.length ?? 0) + (whatChangedSummary?.blockers?.existing_unresolved_blockers?.length ?? 0)) === 1
+                    ? 'blocker needs attention'
+                    : 'blockers need attention'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-blue-100 dark:border-slate-800">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Grounded in verifiable audit trail
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/what-changed')}
+                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:underline"
+              >
+                <span>Review now &rarr;</span>
+              </button>
             </div>
           </div>
 

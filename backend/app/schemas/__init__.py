@@ -586,3 +586,248 @@ class PerformanceAppraisalEvidenceResponse(BaseModel):
     evidence_note: str = "Performance points represent objective goal delivery evidence for human manager review; promotion and rating decisions are not automated."
     employees: List[PerformanceAppraisalEvidenceItem] = []
     items: Optional[List[PerformanceAppraisalEvidenceItem]] = []
+
+# --- "What Changed Since Yesterday?" Schemas ---
+class EvidenceCitation(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    source_type: str  # "task" | "checkin" | "blocker" | "sprint" | "digest"
+    source_id: str
+    title: str
+    author_or_owner: str
+    timestamp: Optional[str] = None
+    excerpt: str
+    verified: bool = False
+    rejection_reason: Optional[str] = None
+
+class CompletedWorkItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    task_id: int
+    title: str
+    owner: str
+    completed_at: Optional[str] = None
+    difficulty: int = 3
+    points_earned: float = 0.0
+    evidence: List[EvidenceCitation] = []
+
+class MeaningfulTaskProgressItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    task_id: int
+    title: str
+    owner: str
+    progress_delta_pct: int = 0
+    current_progress_pct: int = 0
+    note: str = ""
+    pr_link: Optional[str] = None
+    evidence: List[EvidenceCitation] = []
+
+class SprintProgressDelta(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    sprint_id: Optional[int] = None
+    sprint_name: Optional[str] = None
+    total_points: int = 0
+    completed_points_yesterday: int = 0
+    completed_points_today: int = 0
+    delta_points: int = 0
+    evidence: List[EvidenceCitation] = []
+
+class CheckinDeltaItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    user_name: str
+    yesterday_achievement: str = ""
+    today_plan: str = ""
+    mood: int = 4
+    evidence: List[EvidenceCitation] = []
+
+class ProgressDeltaSection(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    completed_work: List[CompletedWorkItem] = []
+    meaningful_task_progress: List[MeaningfulTaskProgressItem] = []
+    sprint_progress: Optional[SprintProgressDelta] = None
+    checkin_updates: List[CheckinDeltaItem] = []
+
+class NewBlockerItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    blocker_id: int
+    summary: str
+    severity: str = "medium"
+    owner: str
+    blocked_by: str = "Unassigned"
+    created_at: Optional[str] = None
+    evidence: List[EvidenceCitation] = []
+
+class ExistingUnresolvedBlockerItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    blocker_id: int
+    summary: str
+    severity: str = "medium"
+    owner: str
+    blocked_by: str = "Unassigned"
+    age_days: int = 0
+    evidence: List[EvidenceCitation] = []
+
+class BlockersDeltaSection(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    new_blockers: List[NewBlockerItem] = []
+    existing_unresolved_blockers: List[ExistingUnresolvedBlockerItem] = []
+
+class RiskItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    risk_id: str
+    severity: str = "medium"
+    summary: str
+    rationale: str
+    evidence: List[EvidenceCitation] = []
+
+class AttentionItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    item_id: str
+    priority: str = "medium"  # "low", "medium", "urgent"
+    action: str
+    target_person: str
+    suggested_channel: str = "Teams"
+    evidence: List[EvidenceCitation] = []
+
+class InsufficientDataInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    is_insufficient: bool = False
+    missing_checkins: List[str] = []
+    notes: List[str] = []
+
+class TeamScopeInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    manager_id: int
+    manager_name: str
+    member_count: int = 0
+    checked_in_count: int = 0
+
+class WhatChangedResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    target_date: str
+    previous_working_day: str
+    window_start: str
+    window_end: str
+    is_weekend_lookback: bool = False
+    team_scope: TeamScopeInfo
+    progress: ProgressDeltaSection
+    blockers: BlockersDeltaSection
+    risks: List[RiskItem] = []
+    needs_manager_attention: List[AttentionItem] = []
+    insufficient_data: InsufficientDataInfo
+
+# --- Performance History & Intelligence Schemas (Phase 5) ---
+class QuarterPerformanceDetail(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    cycle_id: int
+    cycle_name: str
+    year: int
+    quarter: str
+    status: str
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    assigned_points: float
+    previously_earned_points: float
+    cycle_earned_points: float
+    lifetime_earned_points: float
+    remaining_points: float
+    completion_rate_pct: float
+    goals_count: int
+    active_goals_count: int
+    completed_goals_count: int
+    carried_forward_goals_count: int
+    goals: List[PerformanceGoalResponse] = []
+
+class YearlyPerformanceSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    year: int
+    assigned_points: float
+    earned_points: float
+    lifetime_earned_points: float
+    completion_rate_pct: float
+    quarters_count: int
+    quarters: List[QuarterPerformanceDetail] = []
+
+class PerformanceTrendInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    direction: str  # "improving" | "declining" | "stable" | "insufficient_data"
+    delta_pct: Optional[float] = None
+    summary: str
+    data_points_count: int = 0
+
+class CurrentCycleMetrics(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    cycle_id: int
+    cycle_name: str
+    year: int
+    quarter: str
+    status: str
+    assigned_points: float
+    earned_points: float
+    previously_earned_points: float
+    lifetime_earned_points: float
+    remaining_points: float
+    completion_rate_pct: float
+    active_goals_count: int
+    carried_goals_count: int
+    completed_goals_count: int
+    total_goals_count: int
+    goals: List[PerformanceGoalResponse] = []
+
+class PerformanceHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    full_name: str
+    email: Optional[str] = None
+    title: str
+    role: str
+    role_level: int
+    manager_name: Optional[str] = None
+    current_cycle: Optional[CurrentCycleMetrics] = None
+    historical_quarters: List[QuarterPerformanceDetail] = []
+    yearly_summaries: List[YearlyPerformanceSummary] = []
+    trend: PerformanceTrendInfo
+    has_history: bool = True
+
+class TeamPerformanceMemberSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    full_name: str
+    email: str
+    title: str
+    role: str
+    role_level: int
+    manager_name: Optional[str] = None
+    current_cycle_name: Optional[str] = None
+    current_completion_pct: Optional[float] = None
+    yearly_summaries: List[YearlyPerformanceSummary] = []
+    latest_trend: Optional[str] = None
+    has_history: bool = True
+
+class TeamPerformanceHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    manager_id: int
+    manager_name: str
+    is_director: bool
+    members: List[TeamPerformanceMemberSummary] = []
+

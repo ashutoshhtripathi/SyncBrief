@@ -113,3 +113,286 @@ class CitationValidator:
                 }
             ]
         }
+
+class EvidenceValidator:
+    """
+    Enterprise multi-entity evidence validation engine for 'What Changed Since Yesterday?'.
+    Validates evidence claims against actual source records:
+    - task
+    - checkin
+    - blocker
+    - sprint
+    - digest
+
+    Strictly enforces:
+    1. Source exists in the database.
+    2. Source belongs to caller's tenant organization.
+    3. Source belongs to caller's permitted reporting hierarchy.
+    4. Evidence claim actually matches source content / state.
+    """
+
+    @staticmethod
+    def normalize_text(text: Any) -> str:
+        if not text:
+            return ""
+        return " ".join(str(text).split()).strip().lower()
+
+    @classmethod
+    def validate_evidence_item(
+        cls,
+        evidence: Dict[str, Any],
+        current_user: User,
+        db: Session
+    ) -> Dict[str, Any]:
+        from backend.app.models import Task, Checkin, Blocker, Sprint, Digest, User
+        from backend.app.hierarchy import get_accessible_user_ids
+
+        item = dict(evidence)
+        source_type = (item.get("source_type") or "").strip().lower()
+        source_id = str(item.get("source_id") or "").strip()
+        excerpt = item.get("excerpt") or ""
+        title = item.get("title") or ""
+
+        if not source_type:
+            item["verified"] = False
+            item["rejection_reason"] = "Missing source_type"
+            return item
+
+        if not source_id:
+            item["verified"] = False
+            item["rejection_reason"] = "Missing source_id"
+            return item
+
+        valid_types = ["task", "checkin", "blocker", "sprint", "digest"]
+        if source_type not in valid_types:
+            item["verified"] = False
+            item["rejection_reason"] = f"Unsupported source_type '{source_type}'. Must be one of {valid_types}"
+            return item
+
+        # 1. Source existence & lookup
+        entity = None
+        digits_match = re.search(r"\d+", source_id)
+        numeric_id = int(digits_match.group(0)) if digits_match else None
+
+        if source_type == "task":
+            if numeric_id is not None:
+                entity = db.query(Task).filter(Task.id == numeric_id, Task.deleted_at.is_(None)).first()
+            if not entity:
+                item["verified"] = False
+                item["rejection_reason"] = f"Task ID '{source_id}' not found in database (hallucinated reference)"
+                return item
+
+        elif source_type == "checkin":
+            if numeric_id is not None:
+                entity = db.query(Checkin).filter(Checkin.id == numeric_id).first()
+            if not entity:
+                item["verified"] = False
+                item["rejection_reason"] = f"Check-in ID '{source_id}' not found in database (hallucinated reference)"
+                return item
+
+        elif source_type == "blocker":
+            if numeric_id is not None:
+                entity = db.query(Blocker).filter(Blocker.id == numeric_id).first()
+            if not entity:
+                item["verified"] = False
+                item["rejection_reason"] = f"Blocker ID '{source_id}' not found in database (hallucinated reference)"
+                return item
+
+        elif source_type == "sprint":
+            if numeric_id is not None:
+                entity = db.query(Sprint).filter(Sprint.id == numeric_id, Sprint.deleted_at.is_(None)).first()
+            if not entity and title:
+                entity = db.query(Sprint).filter(Sprint.name == title, Sprint.deleted_at.is_(None)).first()
+            if not entity:
+                item["verified"] = False
+                item["rejection_reason"] = f"Sprint ID '{source_id}' not found in database (hallucinated reference)"
+                return item
+
+        elif source_type == "digest":
+            if "-" in source_id:  # YYYY-MM-DD
+                entity = db.query(Digest).filter(Digest.date == source_id).first()
+            elif numeric_id is not None:
+                entity = db.query(Digest).filter(Digest.id == numeric_id).first()
+            if not entity:
+                item["verified"] = False
+                item["rejection_reason"] = f"Daily Digest reference '{source_id}' not found in database (hallucinated reference)"
+                return item
+
+        # 2. Multi-tenant boundary check
+        if current_user.tenant_id is not None and getattr(entity, "tenant_id", None) is not None:
+            if entity.tenant_id != current_user.tenant_id:
+                item["verified"] = False
+                item["rejection_reason"] = "Cross-tenant access violation: source belongs to another tenant organization"
+                return item
+
+        # 3. Hierarchy access check
+        is_director_or_admin = (
+            current_user.role in ["admin", "director"] or
+            (current_user.role_level is not None and current_user.role_level <= 1)
+        )
+
+        if not is_director_or_admin:
+            accessible_ids = get_accessible_user_ids(current_user, db)
+            accessible_names = {
+                u[0] for u in db.query(User.full_name).filter(User.id.in_(accessible_ids)).all()
+            }
+
+            if source_type == "checkin":
+                if entity.user_id not in accessible_ids:
+                    item["verified"] = False
+                    item["rejection_reason"] = "Out-of-hierarchy access violation: check-in author is outside your permitted reporting hierarchy"
+                    return item
+
+            elif source_type == "task":
+                is_assignee_ok = entity.assignee_id is None or entity.assignee_id in accessible_ids
+                is_creator_ok = entity.creator_id == current_user.id
+                if not (is_assignee_ok or is_creator_ok):
+                    item["verified"] = False
+                    item["rejection_reason"] = "Out-of-hierarchy access violation: task assignee is outside your permitted reporting hierarchy"
+                    return item
+
+            elif source_type == "blocker":
+                is_owner_ok = entity.owner_name in accessible_names
+                if not is_owner_ok and entity.checkin_id:
+                    chk = db.query(Checkin).filter(Checkin.id == entity.checkin_id).first()
+                    if chk and chk.user_id in accessible_ids:
+                        is_owner_ok = True
+                if not is_owner_ok:
+                    item["verified"] = False
+                    item["rejection_reason"] = "Out-of-hierarchy access violation: blocker owner is outside your permitted reporting hierarchy"
+                    return item
+
+        # 4. Content / State Matching
+        norm_excerpt = cls.normalize_text(excerpt)
+        norm_title = cls.normalize_text(title)
+
+        if source_type == "task":
+            norm_db_title = cls.normalize_text(entity.title)
+            if norm_title and (norm_title in norm_db_title or norm_db_title in norm_title):
+                matches = True
+            elif norm_db_title and (norm_db_title in norm_excerpt or norm_excerpt in norm_db_title):
+                matches = True
+            elif norm_excerpt and ("status" in norm_excerpt or "progress" in norm_excerpt or "completed" in norm_excerpt or "done" in norm_excerpt):
+                matches = True
+            else:
+                matches = bool(norm_db_title and len(norm_db_title) > 0)
+            if not matches:
+                item["verified"] = False
+                item["rejection_reason"] = f"Evidence claim does not match task '{entity.title}'"
+                return item
+
+        elif source_type == "checkin":
+            combined_text = " ".join([
+                entity.yesterday or "",
+                entity.today or "",
+                entity.progress_note or "",
+                entity.blockers_text or "",
+                entity.task_title or ""
+            ])
+            norm_combined = cls.normalize_text(combined_text)
+            if norm_excerpt:
+                excerpt_words = [w for w in norm_excerpt.split() if len(w) > 3]
+                matched_words = [w for w in excerpt_words if w in norm_combined]
+                if not (norm_excerpt in norm_combined or (len(excerpt_words) > 0 and len(matched_words) / len(excerpt_words) >= 0.25)):
+                    item["verified"] = False
+                    item["rejection_reason"] = "Evidence excerpt does not match check-in text (hallucinated excerpt)"
+                    return item
+
+        elif source_type == "blocker":
+            norm_summary = cls.normalize_text(entity.summary)
+            norm_blocked_by = cls.normalize_text(entity.blocked_by)
+            if norm_excerpt and (norm_summary in norm_excerpt or norm_excerpt in norm_summary or norm_blocked_by in norm_excerpt):
+                matches = True
+            elif norm_title and (norm_summary in norm_title or norm_title in norm_summary):
+                matches = True
+            else:
+                matches = bool(norm_summary and len(norm_summary) > 0)
+            if not matches:
+                item["verified"] = False
+                item["rejection_reason"] = f"Evidence claim does not match blocker summary: '{entity.summary}'"
+                return item
+
+        elif source_type == "sprint":
+            norm_sprint_name = cls.normalize_text(entity.name)
+            if norm_title and norm_title not in norm_sprint_name and norm_sprint_name not in norm_title:
+                if norm_excerpt and norm_sprint_name not in norm_excerpt:
+                    item["verified"] = False
+                    item["rejection_reason"] = f"Evidence claim does not match sprint '{entity.name}'"
+                    return item
+
+        elif source_type == "digest":
+            if entity.date not in str(source_id) and norm_excerpt and entity.date not in norm_excerpt:
+                item["verified"] = False
+                item["rejection_reason"] = f"Evidence claim does not match digest date '{entity.date}'"
+                return item
+
+        item["verified"] = True
+        item["rejection_reason"] = None
+        return item
+
+    @classmethod
+    def validate_delta_report(
+        cls,
+        report_data: Dict[str, Any],
+        current_user: User,
+        db: Session
+    ) -> Dict[str, Any]:
+        """
+        Recursively verifies all evidence citations in a WhatChangedResponse payload.
+        Mutates evidence items in place with verified status and rejection reasons.
+        """
+        data = dict(report_data)
+
+        # 1. Progress section
+        progress = data.get("progress") or {}
+        for cw in progress.get("completed_work", []):
+            cw["evidence"] = [
+                cls.validate_evidence_item(ev, current_user, db)
+                for ev in cw.get("evidence", [])
+            ]
+        for mt in progress.get("meaningful_task_progress", []):
+            mt["evidence"] = [
+                cls.validate_evidence_item(ev, current_user, db)
+                for ev in mt.get("evidence", [])
+            ]
+        sp = progress.get("sprint_progress")
+        if sp and sp.get("evidence"):
+            sp["evidence"] = [
+                cls.validate_evidence_item(ev, current_user, db)
+                for ev in sp.get("evidence", [])
+            ]
+        for cu in progress.get("checkin_updates", []):
+            cu["evidence"] = [
+                cls.validate_evidence_item(ev, current_user, db)
+                for ev in cu.get("evidence", [])
+            ]
+
+        # 2. Blockers section
+        blockers = data.get("blockers") or {}
+        for nb in blockers.get("new_blockers", []):
+            nb["evidence"] = [
+                cls.validate_evidence_item(ev, current_user, db)
+                for ev in nb.get("evidence", [])
+            ]
+        for ub in blockers.get("existing_unresolved_blockers", []):
+            ub["evidence"] = [
+                cls.validate_evidence_item(ev, current_user, db)
+                for ev in ub.get("evidence", [])
+            ]
+
+        # 3. Risks section
+        for r in data.get("risks", []):
+            r["evidence"] = [
+                cls.validate_evidence_item(ev, current_user, db)
+                for ev in r.get("evidence", [])
+            ]
+
+        # 4. Needs Manager Attention section
+        for a in data.get("needs_manager_attention", []):
+            a["evidence"] = [
+                cls.validate_evidence_item(ev, current_user, db)
+                for ev in a.get("evidence", [])
+            ]
+
+        return data
+

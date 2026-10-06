@@ -128,3 +128,61 @@ class AzureOpenAIProvider(AIProvider):
         except Exception as e:
             logger.error(f"Azure OpenAI digest generation error, falling back to mock: {e}")
             return await self.mock_fallback.generate_digest(checkins, blockers, team_members, digest_date)
+
+    async def analyze_what_changed(
+        self,
+        delta_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Call Azure OpenAI to synthesize team delta intelligence since previous working day."""
+        if not self.client:
+            logger.info("Azure OpenAI credentials not set, using MockProvider for what-changed.")
+            return await self.mock_fallback.analyze_what_changed(delta_context)
+
+        try:
+            prompt_path = "backend/app/ai/prompts/what_changed_v1.txt"
+            with open(prompt_path, "r") as f:
+                prompt_template = f.read()
+
+            prompt = prompt_template.format(
+                target_date=delta_context.get("target_date", ""),
+                previous_working_day=delta_context.get("previous_working_day", ""),
+                window_start=delta_context.get("window_start", ""),
+                window_end=delta_context.get("window_end", ""),
+                is_weekend_lookback="true" if delta_context.get("is_weekend_lookback") else "false",
+                team_scope_json=json.dumps(delta_context.get("team_scope", {}), indent=2, default=str),
+                completed_tasks_json=json.dumps(delta_context.get("completed_tasks", []), indent=2, default=str),
+                progressed_tasks_json=json.dumps(delta_context.get("progressed_tasks", []), indent=2, default=str),
+                sprint_info_json=json.dumps(delta_context.get("sprint_info", {}), indent=2, default=str),
+                new_blockers_json=json.dumps(delta_context.get("new_blockers", []), indent=2, default=str),
+                existing_blockers_json=json.dumps(delta_context.get("existing_blockers", []), indent=2, default=str),
+                missing_checkins_json=json.dumps(delta_context.get("missing_checkins", []), indent=2, default=str),
+                checkins_json=json.dumps(delta_context.get("checkins", []), indent=2, default=str)
+            )
+
+            # Retry loop for robust structured JSON generation
+            for attempt in range(2):
+                try:
+                    response = await self.client.chat.completions.create(
+                        model=self.deployment,
+                        messages=[
+                            {"role": "system", "content": "You are a precise JSON-only executive engineering delta analyzer."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.1
+                    )
+                    content = response.choices[0].message.content
+                    data = json.loads(content)
+                    if isinstance(data, dict):
+                        return data
+                except json.JSONDecodeError as json_err:
+                    if attempt == 1:
+                        raise json_err
+                    logger.warning(f"JSON decode retry {attempt}: {json_err}")
+
+        except Exception as e:
+            logger.error(f"Azure OpenAI what-changed analysis error, falling back to mock: {e}")
+            return await self.mock_fallback.analyze_what_changed(delta_context)
+
+        return await self.mock_fallback.analyze_what_changed(delta_context)
+

@@ -33,3 +33,12 @@ class AIProvider(ABC):
     ) -> Dict[str, Any]:
         """Generate executive digest from team updates."""
         pass
+
+    @abstractmethod
+    async def analyze_what_changed(
+        self,
+        delta_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Analyze team progress, blockers, risks, and manager actions since previous working day."""
+        pass
+

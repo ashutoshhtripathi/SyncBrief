@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+import re
 from backend.app.database import get_db
 from backend.app.models import User, Task, PerformanceCycle, PerformanceGoal
 from backend.app.schemas import (
@@ -15,7 +16,14 @@ from backend.app.schemas import (
     PerformanceGoalResponse,
     PerformanceSummaryEmployee,
     PerformanceAppraisalEvidenceItem,
-    PerformanceAppraisalEvidenceResponse
+    PerformanceAppraisalEvidenceResponse,
+    QuarterPerformanceDetail,
+    YearlyPerformanceSummary,
+    PerformanceTrendInfo,
+    CurrentCycleMetrics,
+    PerformanceHistoryResponse,
+    TeamPerformanceMemberSummary,
+    TeamPerformanceHistoryResponse
 )
 from backend.app.auth_deps import get_current_user
 from backend.app.hierarchy import (
@@ -867,3 +875,297 @@ def get_performance_appraisal_evidence(
         "employees": evidence_items,
         "items": evidence_items
     }
+
+# =========================================================================
+# PHASE 5: PERFORMANCE HISTORY & INTELLIGENCE
+# =========================================================================
+
+def parse_cycle_year_quarter(c: PerformanceCycle) -> tuple[int, str]:
+    """Deterministically extracts (Year, Quarter) from cycle name or start date."""
+    m = re.search(r"(\d{4})[-_ ]?[Qq]([1-4])", c.name)
+    if m:
+        return int(m.group(1)), f"Q{m.group(2)}"
+    start = c.start_date or datetime.utcnow()
+    q_num = (start.month - 1) // 3 + 1
+    return start.year, f"Q{q_num}"
+
+def build_user_performance_history(user: User, db: Session) -> Dict[str, Any]:
+    """
+    Builds permanent multi-quarter and multi-year historical performance records for a user.
+    - Groups records chronologically by Year -> Q1, Q2, Q3, Q4.
+    - Correctly calculates cycle earned points vs locked previously earned points (no double-counting).
+    - Preserves historical cycles without overwriting when new quarters start.
+    - Generates deterministic performance trends strictly from verified database facts.
+    """
+    cycles = db.query(PerformanceCycle).filter(
+        PerformanceCycle.tenant_id == user.tenant_id,
+        PerformanceCycle.deleted_at.is_(None)
+    ).order_by(PerformanceCycle.start_date.asc()).all()
+
+    goals = db.query(PerformanceGoal).filter(
+        PerformanceGoal.user_id == user.id,
+        PerformanceGoal.tenant_id == user.tenant_id,
+        PerformanceGoal.deleted_at.is_(None)
+    ).all()
+
+    if not goals and not cycles:
+        return {
+            "user_id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "title": user.title,
+            "role": user.role,
+            "role_level": user.role_level or 5,
+            "manager_name": user.manager.full_name if user.manager else None,
+            "current_cycle": None,
+            "historical_quarters": [],
+            "yearly_summaries": [],
+            "trend": {
+                "direction": "insufficient_data",
+                "delta_pct": None,
+                "summary": "No historical performance data available.",
+                "data_points_count": 0
+            },
+            "has_history": False
+        }
+
+    goals_by_cycle: Dict[int, List[PerformanceGoal]] = {}
+    for g in goals:
+        goals_by_cycle.setdefault(g.cycle_id, []).append(g)
+
+    historical_quarters: List[Dict[str, Any]] = []
+    for c in cycles:
+        cycle_goals = goals_by_cycle.get(c.id, [])
+        # Include cycles with goals or active cycle for tenant
+        if not cycle_goals and c.status != "active":
+            continue
+
+        year, quarter = parse_cycle_year_quarter(c)
+
+        assigned_points = round(sum(g.assigned_points for g in cycle_goals), 1)
+        prev_earned = round(sum(g.previously_earned_points for g in cycle_goals), 1)
+        cycle_earned = round(sum(g.earned_points for g in cycle_goals), 1)
+        lifetime_earned = round(prev_earned + cycle_earned, 1)
+        remaining = round(sum(g.remaining_points for g in cycle_goals), 1)
+
+        completion_rate = 0.0
+        if assigned_points > 0:
+            completion_rate = round((lifetime_earned / assigned_points) * 100.0, 1)
+
+        completed_count = len([g for g in cycle_goals if g.status == "completed"])
+        active_count = len([g for g in cycle_goals if g.status == "in_progress"])
+        carried_count = len([g for g in cycle_goals if g.carried_from_goal_id is not None or g.status == "carried_forward"])
+
+        q_detail = {
+            "cycle_id": c.id,
+            "cycle_name": c.name,
+            "year": year,
+            "quarter": quarter,
+            "status": c.status,
+            "start_date": c.start_date,
+            "end_date": c.end_date,
+            "assigned_points": assigned_points,
+            "previously_earned_points": prev_earned,
+            "cycle_earned_points": cycle_earned,
+            "lifetime_earned_points": lifetime_earned,
+            "remaining_points": remaining,
+            "completion_rate_pct": completion_rate,
+            "goals_count": len(cycle_goals),
+            "active_goals_count": active_count,
+            "completed_goals_count": completed_count,
+            "carried_forward_goals_count": carried_count,
+            "goals": [goal_to_response(g) for g in cycle_goals]
+        }
+        historical_quarters.append(q_detail)
+
+    quarter_order = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
+    historical_quarters.sort(key=lambda q: (q["year"], quarter_order.get(q["quarter"], 5), q["start_date"] or datetime.min))
+
+    # Current cycle: active cycle preferred, or latest cycle
+    current_cycle_dict = None
+    active_q = next((q for q in reversed(historical_quarters) if q["status"] == "active"), None)
+    if not active_q and historical_quarters:
+        active_q = historical_quarters[-1]
+
+    if active_q:
+        current_cycle_dict = {
+            "cycle_id": active_q["cycle_id"],
+            "cycle_name": active_q["cycle_name"],
+            "year": active_q["year"],
+            "quarter": active_q["quarter"],
+            "status": active_q["status"],
+            "assigned_points": active_q["assigned_points"],
+            "earned_points": active_q["cycle_earned_points"],
+            "previously_earned_points": active_q["previously_earned_points"],
+            "lifetime_earned_points": active_q["lifetime_earned_points"],
+            "remaining_points": active_q["remaining_points"],
+            "completion_rate_pct": active_q["completion_rate_pct"],
+            "active_goals_count": active_q["active_goals_count"],
+            "carried_goals_count": active_q["carried_forward_goals_count"],
+            "completed_goals_count": active_q["completed_goals_count"],
+            "total_goals_count": active_q["goals_count"],
+            "goals": active_q["goals"]
+        }
+
+    # Group quarters into Yearly Summaries
+    years_dict: Dict[int, List[Dict[str, Any]]] = {}
+    for q in historical_quarters:
+        years_dict.setdefault(q["year"], []).append(q)
+
+    yearly_summaries: List[Dict[str, Any]] = []
+    for yr in sorted(years_dict.keys()):
+        quarters_in_yr = years_dict[yr]
+        total_yr_assigned = round(sum(q["assigned_points"] for q in quarters_in_yr), 1)
+        total_yr_earned = round(sum(q["cycle_earned_points"] for q in quarters_in_yr), 1)
+        total_yr_lifetime = round(sum(q["lifetime_earned_points"] for q in quarters_in_yr), 1)
+
+        yr_completion = 0.0
+        if total_yr_assigned > 0:
+            yr_completion = round((total_yr_earned / total_yr_assigned) * 100.0, 1)
+
+        yearly_summaries.append({
+            "year": yr,
+            "assigned_points": total_yr_assigned,
+            "earned_points": total_yr_earned,
+            "lifetime_earned_points": total_yr_lifetime,
+            "completion_rate_pct": yr_completion,
+            "quarters_count": len(quarters_in_yr),
+            "quarters": quarters_in_yr
+        })
+
+    # Trend calculation
+    has_history = len(historical_quarters) > 0 and any(q["goals_count"] > 0 for q in historical_quarters)
+    if not has_history:
+        trend = {
+            "direction": "insufficient_data",
+            "delta_pct": None,
+            "summary": "No historical performance data available.",
+            "data_points_count": 0
+        }
+    elif len(historical_quarters) >= 2:
+        curr_q = historical_quarters[-1]
+        prev_q = historical_quarters[-2]
+        delta = round(curr_q["completion_rate_pct"] - prev_q["completion_rate_pct"], 1)
+        if delta > 0:
+            direction = "improving"
+            summary = f"Performance completion increased from {prev_q['completion_rate_pct']}% ({prev_q['cycle_name']}) to {curr_q['completion_rate_pct']}% ({curr_q['cycle_name']}) (+{delta}%)."
+        elif delta < 0:
+            direction = "declining"
+            summary = f"Current cycle completion is {abs(delta)} percentage points below the previous cycle ({curr_q['completion_rate_pct']}% in {curr_q['cycle_name']} vs {prev_q['completion_rate_pct']}% in {prev_q['cycle_name']})."
+        else:
+            direction = "stable"
+            summary = f"Performance completion remained stable at {curr_q['completion_rate_pct']}% between {prev_q['cycle_name']} and {curr_q['cycle_name']}."
+        trend = {
+            "direction": direction,
+            "delta_pct": delta,
+            "summary": summary,
+            "data_points_count": len(historical_quarters)
+        }
+    else:
+        trend = {
+            "direction": "stable",
+            "delta_pct": None,
+            "summary": f"Single cycle recorded: {historical_quarters[0]['cycle_name']} at {historical_quarters[0]['completion_rate_pct']}% completion.",
+            "data_points_count": 1
+        }
+
+    return {
+        "user_id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "title": user.title,
+        "role": user.role,
+        "role_level": user.role_level or 5,
+        "manager_name": user.manager.full_name if user.manager else None,
+        "current_cycle": current_cycle_dict,
+        "historical_quarters": historical_quarters,
+        "yearly_summaries": yearly_summaries,
+        "trend": trend,
+        "has_history": has_history
+    }
+
+@router.get("/history", response_model=PerformanceHistoryResponse)
+def get_my_performance_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Personal multi-quarter and multi-year performance history for logged-in employee."""
+    return build_user_performance_history(current_user, db)
+
+@router.get("/history/team", response_model=TeamPerformanceHistoryResponse)
+def get_team_performance_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Team performance overview across years and quarters with strict hierarchy RBAC:
+    - Director: Authorized across tenant organization.
+    - Manager: Self + direct and indirect subordinate reports.
+    - Employee without subordinates: 403 Forbidden.
+    """
+    is_director_or_admin = current_user.role in ["admin", "director"] or (current_user.role_level is not None and current_user.role_level <= 1)
+    sub_ids = get_subordinate_ids(current_user, db)
+
+    if not is_director_or_admin and not sub_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Team performance history is reserved for managers and directors."
+        )
+
+    user_query = db.query(User).filter(
+        User.deleted_at.is_(None),
+        User.tenant_id == current_user.tenant_id
+    )
+
+    if is_director_or_admin:
+        users = user_query.order_by(User.role_level.asc(), User.full_name.asc()).all()
+    else:
+        allowed_ids = list(sub_ids) + [current_user.id]
+        users = user_query.filter(User.id.in_(allowed_ids)).order_by(User.role_level.asc(), User.full_name.asc()).all()
+
+    members = []
+    for u in users:
+        u_history = build_user_performance_history(u, db)
+        curr_cycle = u_history.get("current_cycle")
+        members.append({
+            "user_id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "title": u.title,
+            "role": u.role,
+            "role_level": u.role_level or 5,
+            "manager_name": u.manager.full_name if u.manager else "Director",
+            "current_cycle_name": curr_cycle["cycle_name"] if curr_cycle else None,
+            "current_completion_pct": curr_cycle["completion_rate_pct"] if curr_cycle else None,
+            "yearly_summaries": u_history.get("yearly_summaries", []),
+            "latest_trend": u_history.get("trend", {}).get("summary"),
+            "has_history": u_history.get("has_history", False)
+        })
+
+    return {
+        "manager_id": current_user.id,
+        "manager_name": current_user.full_name,
+        "is_director": is_director_or_admin,
+        "members": members
+    }
+
+@router.get("/history/user/{user_id}", response_model=PerformanceHistoryResponse)
+@router.get("/history/{user_id}", response_model=PerformanceHistoryResponse)
+def get_user_performance_history(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Performance history of a user with strict hierarchy and multi-tenant RBAC:
+    - Employee viewing another employee -> 403 Forbidden
+    - Manager viewing peer/superior/unrelated employee -> 403 Forbidden
+    - Cross-tenant access -> 403 Forbidden
+    """
+    enforce_hierarchy_access(current_user, user_id, db)
+    target_user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Target user not found")
+    enforce_tenant_access(current_user, target_user.tenant_id)
+
+    return build_user_performance_history(target_user, db)

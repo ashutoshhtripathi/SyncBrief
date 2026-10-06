@@ -18,6 +18,7 @@ from backend.app.api.points import router as points_router
 from backend.app.api.performance import router as performance_router
 from backend.app.api.jira import router as jira_router
 from backend.app.api.audit import router as audit_router
+from backend.app.api.what_changed import router as what_changed_router
 from backend.app.middleware import SecurityHeadersMiddleware, RateLimitMiddleware
 
 # Ensure tables exist and columns are migrated
@@ -73,6 +74,7 @@ app.include_router(points_router, prefix=settings.API_V1_STR)
 app.include_router(performance_router, prefix=settings.API_V1_STR)
 app.include_router(jira_router, prefix=settings.API_V1_STR)
 app.include_router(audit_router, prefix=settings.API_V1_STR)
+app.include_router(what_changed_router, prefix=settings.API_V1_STR)
 
 @app.get("/health", tags=["Health"])
 def health_check():

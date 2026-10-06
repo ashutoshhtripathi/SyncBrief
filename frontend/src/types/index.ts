@@ -423,3 +423,230 @@ export interface OAuthPasswordVerifyPayload {
   password: string;
 }
 
+// --- "What Changed Since Yesterday?" Types ---
+
+export interface EvidenceCitation {
+  source_type: 'task' | 'checkin' | 'blocker' | 'sprint' | 'digest' | string;
+  source_id: string;
+  title: string;
+  author_or_owner: string;
+  timestamp?: string | null;
+  excerpt: string;
+  verified: boolean;
+  rejection_reason?: string | null;
+}
+
+export interface CompletedWorkItem {
+  task_id: number;
+  title: string;
+  owner: string;
+  completed_at?: string | null;
+  difficulty: number;
+  points_earned: number;
+  evidence: EvidenceCitation[];
+}
+
+export interface MeaningfulTaskProgressItem {
+  task_id: number;
+  title: string;
+  owner: string;
+  progress_delta_pct: number;
+  current_progress_pct: number;
+  note?: string;
+  pr_link?: string | null;
+  evidence: EvidenceCitation[];
+}
+
+export interface SprintProgressDelta {
+  sprint_id?: number | null;
+  sprint_name?: string | null;
+  total_points: number;
+  completed_points_yesterday: number;
+  completed_points_today: number;
+  delta_points: number;
+  evidence: EvidenceCitation[];
+}
+
+export interface CheckinDeltaItem {
+  user_id: number;
+  user_name: string;
+  yesterday_achievement?: string;
+  today_plan?: string;
+  mood?: number;
+  evidence: EvidenceCitation[];
+}
+
+export interface ProgressDeltaSection {
+  completed_work: CompletedWorkItem[];
+  meaningful_task_progress: MeaningfulTaskProgressItem[];
+  sprint_progress?: SprintProgressDelta | null;
+  checkin_updates: CheckinDeltaItem[];
+}
+
+export interface NewBlockerItem {
+  blocker_id: number;
+  summary: string;
+  severity: 'low' | 'medium' | 'high' | string;
+  owner: string;
+  blocked_by: string;
+  created_at?: string | null;
+  evidence: EvidenceCitation[];
+}
+
+export interface ExistingUnresolvedBlockerItem {
+  blocker_id: number;
+  summary: string;
+  severity: 'low' | 'medium' | 'high' | string;
+  owner: string;
+  blocked_by: string;
+  age_days: number;
+  evidence: EvidenceCitation[];
+}
+
+export interface BlockersDeltaSection {
+  new_blockers: NewBlockerItem[];
+  existing_unresolved_blockers: ExistingUnresolvedBlockerItem[];
+}
+
+export interface RiskItem {
+  risk_id: string;
+  severity: 'low' | 'medium' | 'high' | 'urgent' | string;
+  summary: string;
+  rationale: string;
+  evidence: EvidenceCitation[];
+}
+
+export interface AttentionItem {
+  item_id: string;
+  priority: 'low' | 'medium' | 'urgent' | string;
+  action: string;
+  target_person: string;
+  suggested_channel: string;
+  evidence: EvidenceCitation[];
+}
+
+export interface InsufficientDataInfo {
+  is_insufficient: boolean;
+  missing_checkins: string[];
+  notes: string[];
+}
+
+export interface TeamScopeInfo {
+  manager_id: number;
+  manager_name: string;
+  member_count: number;
+  checked_in_count: number;
+}
+
+export interface WhatChangedResponse {
+  target_date: string;
+  previous_working_day: string;
+  window_start: string;
+  window_end: string;
+  is_weekend_lookback: boolean;
+  team_scope: TeamScopeInfo;
+  progress: ProgressDeltaSection;
+  blockers: BlockersDeltaSection;
+  risks: RiskItem[];
+  needs_manager_attention: AttentionItem[];
+  insufficient_data: InsufficientDataInfo;
+}
+
+// ==========================================
+// Performance History & Intelligence (Phase 5)
+// ==========================================
+
+export interface QuarterPerformanceDetail {
+  cycle_id: number;
+  cycle_name: string;
+  year: number;
+  quarter: string;
+  status: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  assigned_points: number;
+  previously_earned_points: number;
+  cycle_earned_points: number;
+  lifetime_earned_points: number;
+  remaining_points: number;
+  completion_rate_pct: number;
+  goals_count: number;
+  active_goals_count: number;
+  completed_goals_count: number;
+  carried_forward_goals_count: number;
+  goals: PerformanceGoal[];
+}
+
+export interface YearlyPerformanceSummary {
+  year: number;
+  assigned_points: number;
+  earned_points: number;
+  lifetime_earned_points: number;
+  completion_rate_pct: number;
+  quarters_count: number;
+  quarters: QuarterPerformanceDetail[];
+}
+
+export interface PerformanceTrendInfo {
+  direction: 'improving' | 'declining' | 'stable' | 'insufficient_data' | string;
+  delta_pct?: number | null;
+  summary: string;
+  data_points_count: number;
+}
+
+export interface CurrentCycleMetrics {
+  cycle_id: number;
+  cycle_name: string;
+  year: number;
+  quarter: string;
+  status: string;
+  assigned_points: number;
+  earned_points: number;
+  previously_earned_points: number;
+  lifetime_earned_points: number;
+  remaining_points: number;
+  completion_rate_pct: number;
+  active_goals_count: number;
+  carried_goals_count: number;
+  completed_goals_count: number;
+  total_goals_count: number;
+  goals: PerformanceGoal[];
+}
+
+export interface PerformanceHistoryResponse {
+  user_id: number;
+  full_name: string;
+  email?: string | null;
+  title: string;
+  role: string;
+  role_level: number;
+  manager_name?: string | null;
+  current_cycle?: CurrentCycleMetrics | null;
+  historical_quarters: QuarterPerformanceDetail[];
+  yearly_summaries: YearlyPerformanceSummary[];
+  trend: PerformanceTrendInfo;
+  has_history: boolean;
+}
+
+export interface TeamPerformanceMemberSummary {
+  user_id: number;
+  full_name: string;
+  email: string;
+  title: string;
+  role: string;
+  role_level: number;
+  manager_name?: string | null;
+  current_cycle_name?: string | null;
+  current_completion_pct?: number | null;
+  yearly_summaries: YearlyPerformanceSummary[];
+  latest_trend?: string | null;
+  has_history: boolean;
+}
+
+export interface TeamPerformanceHistoryResponse {
+  manager_id: number;
+  manager_name: string;
+  is_director: boolean;
+  members: TeamPerformanceMemberSummary[];
+}
+
