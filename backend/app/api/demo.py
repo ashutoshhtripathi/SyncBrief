@@ -7,12 +7,12 @@ from backend.app.models import User, Channel, Message, Checkin, Blocker, Digest,
 from backend.app.ai import get_ai_provider, CitationValidator
 from backend.app.integrations.teams_cards import TeamsCardGenerator
 
-router = APIRouter(prefix="/demo", tags=["Judges Demo Scenario Runner"])
+router = APIRouter(prefix="/demo", tags=["Interactive Demo Scenario Runner"])
 
 @router.post("/run-scenario")
-async def run_judge_demo_scenario(db: Session = Depends(get_db)):
+async def run_demo_scenario(db: Session = Depends(get_db)):
     """
-    Executes the complete end-to-end golden path demo for hackathon judges:
+    Executes the complete end-to-end golden path demonstration:
     1. Ensures evidence thread #492 in #backend is present
     2. Submits Priya's async check-in with PR #184 blocker
     3. Runs AI extraction & strict citation validation against msg_492
@@ -56,7 +56,7 @@ async def run_judge_demo_scenario(db: Session = Depends(get_db)):
         today="Testing tenant login endpoints and writing Cypress integration test cases.",
         blockers_text="PR #184 Auth API is blocked waiting for database migration script from the backend team.",
         mood=2,
-        pr_link="https://github.com/microsoft/SyncBrief/pull/184",
+        pr_link="https://github.com/ashutoshhtripathi/SyncBrief/pull/184",
         work_item_id="ADO-4820",
         status="submitted",
         streak_count=(priya.streak_count or 9) + 1,
@@ -133,10 +133,10 @@ async def run_judge_demo_scenario(db: Session = Depends(get_db)):
     db.add(digest)
 
     db.add(AuditLog(
-        action="judge_demo_scenario",
+        action="run_demo_scenario",
         model_used=ai_provider.name,
         prompt_version="blocker_v1",
-        input_summary="Triggered 1-click Judge Golden Path Demo",
+        input_summary="Triggered 1-click Golden Path Product Demo",
         output_summary=f"Created checkin #{checkin.id}, blocker with citation {evidence_msg.id}, and synthesized digest #{digest.id}"
     ))
 

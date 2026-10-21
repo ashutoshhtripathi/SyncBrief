@@ -394,6 +394,14 @@ async def get_what_changed(
         db=db
     )
 
+    if isinstance(verified_result, dict):
+        verified_result.setdefault("blockers", {"new_blockers": [], "existing_unresolved_blockers": []})
+        verified_result.setdefault("insufficient_data", {
+            "is_insufficient": False,
+            "missing_checkins": missing_checkin_names,
+            "notes": []
+        })
+
     validated_response = WhatChangedResponse.model_validate(verified_result)
 
     # 11. Immutable Audit Logging

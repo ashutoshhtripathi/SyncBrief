@@ -1,3 +1,4 @@
+import json
 import pytest
 from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
@@ -237,3 +238,58 @@ def test_13_conversation_followup_works():
     t2_data = turn2.json()
     assert t2_data["conversation_id"] == conv_id
     assert "oldest" in t2_data["answer"].lower() or "blocker" in t2_data["answer"].lower()
+
+def test_14_streaming_endpoint_requires_auth():
+    """14. Unauthenticated requests to /api/assistant/chat/stream return 401."""
+    resp = client.post("/api/assistant/chat/stream", json={"message": "Hello"})
+    assert resp.status_code == 401
+
+def test_15_streaming_endpoint_streams_sse_events():
+    """15. /api/assistant/chat/stream streams SSE token events and done event."""
+    headers = get_headers("vikram.joshi@syncbrief.ai")
+    resp = client.post(
+        "/api/assistant/chat/stream",
+        json={"message": "What is blocking my team?"},
+        headers=headers
+    )
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers.get("content-type", "")
+    lines = [l for l in resp.text.split("\n") if l.startswith("data: ")]
+    assert len(lines) > 0
+
+    has_token = False
+    has_done = False
+    for l in lines:
+        payload = json.loads(l[6:])
+        if payload.get("type") == "token":
+            has_token = True
+        elif payload.get("type") == "done":
+            has_done = True
+            assert "conversation_id" in payload
+            assert payload.get("insufficient_data") is False
+
+    assert has_token is True
+    assert has_done is True
+
+def test_16_broad_workspace_data_questions_answered():
+    """16. Chatbot answers general questions using live workspace data and citations."""
+    headers = get_headers("sarah.jenkins@syncbrief.ai")
+    resp = client.post(
+        "/api/assistant/chat",
+        json={"message": "What tasks are currently in the active sprint?"},
+        headers=headers
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["insufficient_data"] is False
+    assert len(data["answer"]) > 0
+    assert "task" in data["answer"].lower() or "sprint" in data["answer"].lower()
+
+def test_17_system_status_reports_groq():
+    """17. /api/status reports Groq configuration and badge."""
+    resp = client.get("/api/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["groq_configured"] is True
+    assert "Groq" in data["badge_label"]
+

@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { sendAssistantMessage } from '../api';
 import { ChatMessage, EvidenceCitation } from '../types';
 import { EvidenceCitationBadge } from './EvidenceCitationBadge';
+import { FormattedChatMessage } from './FormattedChatMessage';
 
 interface AskSyncBriefDrawerProps {
   isOpen: boolean;
@@ -34,6 +35,11 @@ export const AskSyncBriefDrawer: React.FC<AskSyncBriefDrawerProps> = ({
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
+
+  const toggleCitations = (msgId: string) => {
+    setExpandedCitations(prev => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -106,7 +112,11 @@ export const AskSyncBriefDrawer: React.FC<AskSyncBriefDrawerProps> = ({
         setConversationId(resp.conversation_id);
       }
 
+      const isExplicitCitationQuery = /link|source|citation|verified|proof|evidence|verify/i.test(text);
       const botMsgId = `bot_${Date.now()}`;
+      if (isExplicitCitationQuery) {
+        setExpandedCitations(prev => ({ ...prev, [botMsgId]: true }));
+      }
       const botMsg: ChatMessage = {
         id: botMsgId,
         role: 'assistant',
@@ -163,6 +173,9 @@ export const AskSyncBriefDrawer: React.FC<AskSyncBriefDrawerProps> = ({
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                     <ShieldCheck className="w-3 h-3 text-emerald-500" />
                     Verified Evidence
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    ⚡ Groq 120B
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -249,7 +262,11 @@ export const AskSyncBriefDrawer: React.FC<AskSyncBriefDrawerProps> = ({
                         : 'bg-slate-100/90 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700/80 rounded-tl-sm'
                     }`}
                   >
-                    <p className="whitespace-pre-line">{msg.content}</p>
+                    {msg.role === 'user' ? (
+                      <p className="whitespace-pre-line font-medium text-white">{msg.content}</p>
+                    ) : (
+                      <FormattedChatMessage content={msg.content} />
+                    )}
 
                     {/* Insufficient Data Alert */}
                     {msg.insufficient_data && (

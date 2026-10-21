@@ -80,7 +80,7 @@ export const DigestPage: React.FC = () => {
     
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
-    doc.text(`Date: ${digest.date} | Microsoft Innovate 2026 Hackathon Demo`, 14, 27);
+    doc.text(`Date: ${digest.date} | Enterprise Executive Standup Report`, 14, 27);
     doc.line(14, 30, 196, 30);
 
     let y = 38;

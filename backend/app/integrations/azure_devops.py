@@ -62,7 +62,7 @@ class AzureDevOpsClient:
             {
                 "op": "add",
                 "path": "/fields/System.Tags",
-                "value": "SyncBrief; AI-Blocker; Innovate2026"
+                "value": "SyncBrief; AI-Blocker; WorkIntelligence"
             },
             {
                 "op": "add",

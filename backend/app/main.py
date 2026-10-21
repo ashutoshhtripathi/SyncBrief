@@ -41,7 +41,7 @@ except Exception as _seed_err:
 
 app = FastAPI(
     title="SyncBrief AI Backend API",
-    description="Async standup updates with verifiable chat evidence citations for distributed teams. Microsoft Innovate 2026 Hackathon.",
+    description="Async standup updates with verifiable chat evidence citations and real-time AI for distributed engineering teams.",
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
@@ -89,6 +89,13 @@ from backend.app.auth_utils import SERVER_BOOT_ID
 @app.get("/api/status", tags=["System Status"])
 def system_status():
     ai = get_ai_provider()
+    badge = "Demo AI (Offline)"
+    if not ai.is_mock:
+        if getattr(ai, "is_groq", False):
+            badge = f"Groq ({settings.GROQ_MODEL})"
+        else:
+            badge = f"Azure OpenAI ({settings.AZURE_OPENAI_DEPLOYMENT})"
+
     return {
         "status": "online",
         "app_name": "SyncBrief AI",
@@ -96,7 +103,9 @@ def system_status():
         "boot_id": SERVER_BOOT_ID,
         "ai_provider": ai.name,
         "is_mock": ai.is_mock,
-        "badge_label": "Demo AI (Offline)" if ai.is_mock else f"Azure OpenAI ({settings.AZURE_OPENAI_DEPLOYMENT})",
+        "badge_label": badge,
+        "groq_configured": bool(settings.GROQ_API_KEY),
+        "groq_model": settings.GROQ_MODEL,
         "azure_openai_configured": bool(settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY),
         "teams_configured": bool(settings.TEAMS_WEBHOOK_URL),
         "devops_configured": bool(settings.AZURE_DEVOPS_PAT)

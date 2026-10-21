@@ -1,5 +1,5 @@
-# SyncBrief AI - Hackathon Demo Script & Judge Walkthrough
-**Event**: Microsoft Innovate 2026 Hackathon  
+# SyncBrief AI - Product Demo Script & Walkthrough
+**Platform**: SyncBrief AI — Enterprise Async Work Intelligence & Real-Time AI Operations  
 **Tagline**: *"Async updates. Verifiable evidence. Zero status meetings."*  
 **Duration**: 3 to 5 minutes  
 
@@ -34,7 +34,7 @@ Demonstrate that SyncBrief AI is distinctly **faster, calmer, and clearer** than
    - Highlight the blocker: *"Payments webhook verification failing on signature secret drift"*.
    - Point out the **Citation Badge**: `[#backend • msg_492] (96% Confidence - VERIFIED)`.
    - Click on the badge: the chat inspection modal opens instantly showing the **exact, word-for-word message from Rohan Patel** in `#backend`.
-   - **Key Judge Value**: Sarah didn't have to call a 30-minute status meeting or ping 4 engineers to verify what broke. The proof is right there.
+   - **Key Operational Value**: Sarah didn't have to call a 30-minute status meeting or ping 4 engineers to verify what broke. The proof is right there.
 3. **1-Click Azure DevOps Work Item Creation**:
    - Click **"Create Azure DevOps Task"**.
    - Show the generated work item card (`ADO-7492`) linked to the citation evidence.
@@ -55,7 +55,7 @@ Demonstrate that SyncBrief AI is distinctly **faster, calmer, and clearer** than
 3. **Simulate 409 Conflict Protection**:
    - Click **"Test Conflict Handling (Simulate Stale Version)"**.
    - A live toast appears: *"Conflict (HTTP 409): Task was modified by another user. Reloading latest state..."*.
-   - Show judges how SyncBrief protects concurrent distributed updates without data loss.
+   - Demonstrates how SyncBrief protects concurrent distributed updates without data loss.
 
 ---
 
@@ -73,5 +73,5 @@ Demonstrate that SyncBrief AI is distinctly **faster, calmer, and clearer** than
 
 ---
 
-## 💡 Key Takeaway for Judges
+## 💡 Key Takeaway
 > *"Jira manages tickets. SharePoint stores files. SyncBrief AI manages reality: async updates, cryptographic proof of blockers, and zero status meetings."*

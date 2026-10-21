@@ -59,6 +59,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     initAuth();
+
+    const handleUnauthorized = () => {
+      setUser(null);
+    };
+    window.addEventListener('syncbrief:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('syncbrief:unauthorized', handleUnauthorized);
   }, []);
 
   const loginWithEmail = async (email: string, password = 'demo1234') => {

@@ -91,14 +91,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl transition-colors shadow-xs">
-      {/* Top Microsoft Innovate Ribbon */}
+      {/* Top SyncBrief AI Ribbon */}
       <div className="bg-gradient-to-r from-blue-700 via-sky-600 to-indigo-700 text-white text-xs px-4 py-1.5 flex items-center justify-between font-medium">
         <div className="flex items-center gap-2">
           <span className="bg-white/20 px-2 py-0.5 rounded text-[11px] font-semibold tracking-wider uppercase border border-white/20">
-            Microsoft Innovate 2026
+            SyncBrief AI
           </span>
           <span className="hidden md:inline text-white/95 font-normal">
-            Official Hackathon Entry &bull; Async Updates &bull; Verifiable Evidence &bull; Zero Status Meetings
+            Enterprise Async Work Intelligence &bull; Verifiable Evidence &bull; Zero Status Meetings
           </span>
         </div>
 

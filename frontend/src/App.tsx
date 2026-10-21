@@ -9,6 +9,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { QuickAddTaskModal } from './components/QuickAddTaskModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { AskSyncBriefDrawer } from './components/AskSyncBriefDrawer';
+import { FloatingChatbotWidget } from './components/FloatingChatbotWidget';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
@@ -47,6 +48,7 @@ const AppContent: React.FC = () => {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   const lastKeyRef = useRef<string>('');
   const lastKeyTimeRef = useRef<number>(0);
@@ -66,10 +68,10 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      // Cmd+J or Ctrl+J -> Ask SyncBrief Assistant (works even in inputs)
+      // Cmd+J or Ctrl+J -> Ask SyncBrief Real-Time AI Chatbot (works even in inputs)
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
         e.preventDefault();
-        setIsAssistantOpen((prev) => !prev);
+        setIsChatbotOpen((prev) => !prev);
         return;
       }
 
@@ -168,7 +170,7 @@ const AppContent: React.FC = () => {
       onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       onOpenQuickAdd={() => setIsQuickAddOpen(true)}
       onOpenShortcuts={() => setIsShortcutsOpen(true)}
-      onOpenAssistant={() => setIsAssistantOpen(true)}
+      onOpenAssistant={() => setIsChatbotOpen(true)}
     >
       <Routes>
         <Route path="/" element={<LandingPage onOpenQuickAdd={() => setIsQuickAddOpen(true)} />} />
@@ -193,7 +195,7 @@ const AppContent: React.FC = () => {
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-        onOpenAssistant={() => setIsAssistantOpen(true)}
+        onOpenAssistant={() => setIsChatbotOpen(true)}
       />
 
       <QuickAddTaskModal
@@ -209,6 +211,12 @@ const AppContent: React.FC = () => {
       <AskSyncBriefDrawer
         isOpen={isAssistantOpen}
         onClose={() => setIsAssistantOpen(false)}
+      />
+
+      <FloatingChatbotWidget
+        isOpen={isChatbotOpen}
+        onToggle={() => setIsChatbotOpen((prev) => !prev)}
+        onOpenFullDrawer={() => setIsAssistantOpen(true)}
       />
     </AppLayout>
   );

@@ -9,7 +9,7 @@ def test_hero_blocker_extraction():
         "yesterday": "Completed OAuth frontend flow.",
         "today": "Testing tenant endpoints.",
         "blockers_text": "PR #184 Auth API is blocked waiting for database migration script from the backend team.",
-        "pr_link": "https://github.com/microsoft/SyncBrief/pull/184",
+        "pr_link": "https://github.com/ashutoshhtripathi/SyncBrief/pull/184",
         "work_item_id": "ADO-4820"
     }
     channel_messages = [

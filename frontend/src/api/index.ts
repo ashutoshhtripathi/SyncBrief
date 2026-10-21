@@ -32,7 +32,8 @@ import {
   DependencyListResponse,
   CreateTaskDependencyRequest,
   AssistantChatRequest,
-  AssistantChatResponse
+  AssistantChatResponse,
+  EvidenceCitation
 } from '../types';
 
 const API_BASE = '/api';
@@ -85,6 +86,77 @@ export function getAuthHeaders(): HeadersInit {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
+}
+
+let isRecoveringSession = false;
+let recoveryPromise: Promise<string | null> | null = null;
+
+export async function tryRecoverSession(): Promise<string | null> {
+  const storage = getStorage();
+  const storedUserJson = storage?.getItem('syncbrief_user');
+  let email = 'sarah.jenkins@syncbrief.ai';
+  if (storedUserJson) {
+    try {
+      const u = JSON.parse(storedUserJson);
+      if (u?.email) email = u.email;
+    } catch {}
+  }
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'demo1234' }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.access_token) {
+      storage?.setItem('syncbrief_token', data.access_token);
+      storage?.setItem('syncbrief_user', JSON.stringify(data.user));
+      return data.access_token;
+    }
+  } catch {}
+  return null;
+}
+
+export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(options.headers || {});
+  const storage = getStorage();
+  const token = storage?.getItem('syncbrief_token');
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  let res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401) {
+    // Attempt automatic session recovery if invalidated by server restart
+    if (!isRecoveringSession) {
+      isRecoveringSession = true;
+      recoveryPromise = tryRecoverSession().finally(() => {
+        isRecoveringSession = false;
+      });
+    }
+    const newToken = await recoveryPromise;
+    if (newToken) {
+      const retryHeaders = new Headers(options.headers || {});
+      retryHeaders.set('Authorization', `Bearer ${newToken}`);
+      if (!retryHeaders.has('Content-Type') && !(options.body instanceof FormData)) {
+        retryHeaders.set('Content-Type', 'application/json');
+      }
+      res = await fetch(url, { ...options, headers: retryHeaders });
+    } else {
+      storage?.removeItem('syncbrief_token');
+      storage?.removeItem('syncbrief_user');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('syncbrief:unauthorized'));
+      }
+    }
+  }
+
+  return res;
 }
 
 export async function logoutUser(): Promise<void> {
@@ -938,7 +1010,7 @@ export async function fetchDependencies(filters?: {
   if (filters?.cross_team_only !== undefined) params.append('cross_team_only', String(filters.cross_team_only));
 
   const qs = params.toString() ? `?${params.toString()}` : '';
-  const res = await fetch(`${API_BASE}/dependencies${qs}`, {
+  const res = await authFetch(`${API_BASE}/dependencies${qs}`, {
     headers: getAuthHeaders(),
   });
   if (!res.ok) {
@@ -951,7 +1023,7 @@ export async function fetchDependencies(filters?: {
 }
 
 export async function fetchDependencySummary(): Promise<DependencySummaryResponse> {
-  const res = await fetch(`${API_BASE}/dependencies/summary`, {
+  const res = await authFetch(`${API_BASE}/dependencies/summary`, {
     headers: getAuthHeaders(),
   });
   if (!res.ok) {
@@ -964,7 +1036,7 @@ export async function fetchDependencySummary(): Promise<DependencySummaryRespons
 }
 
 export async function createDependency(data: CreateTaskDependencyRequest): Promise<DependencyItem> {
-  const res = await fetch(`${API_BASE}/dependencies`, {
+  const res = await authFetch(`${API_BASE}/dependencies`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
@@ -982,7 +1054,7 @@ export async function updateDependencyStatus(
   dependencyId: string,
   status: string
 ): Promise<DependencyItem> {
-  const res = await fetch(`${API_BASE}/dependencies/${dependencyId}/status`, {
+  const res = await authFetch(`${API_BASE}/dependencies/${dependencyId}/status`, {
     method: 'PATCH',
     headers: getAuthHeaders(),
     body: JSON.stringify({ status }),
@@ -1025,4 +1097,87 @@ export async function sendAssistantMessage(data: AssistantChatRequest): Promise<
   }
   return res.json();
 }
+
+export interface StreamDonePayload {
+  conversation_id: string;
+  citations: EvidenceCitation[];
+  insufficient_data: boolean;
+  answer?: string;
+}
+
+export async function streamAssistantMessage(
+  data: AssistantChatRequest,
+  callbacks: {
+    onToken: (token: string) => void;
+    onDone: (done: StreamDonePayload) => void;
+    onError: (err: Error) => void;
+  },
+  signal?: AbortSignal
+): Promise<void> {
+  try {
+    const res = await fetch(`${API_BASE}/assistant/chat/stream`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+      signal
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to stream response from assistant' }));
+      throw new Error(err.detail || 'Assistant streaming request failed');
+    }
+
+    if (!res.body) {
+      const jsonRes: AssistantChatResponse = await res.json();
+      callbacks.onToken(jsonRes.answer);
+      callbacks.onDone({
+        conversation_id: jsonRes.conversation_id,
+        citations: jsonRes.citations || [],
+        insufficient_data: jsonRes.insufficient_data,
+        answer: jsonRes.answer
+      });
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const payload = JSON.parse(trimmed.slice(6));
+            if (payload.type === 'token') {
+              callbacks.onToken(payload.content || '');
+            } else if (payload.type === 'done') {
+              callbacks.onDone({
+                conversation_id: payload.conversation_id,
+                citations: payload.citations || [],
+                insufficient_data: payload.insufficient_data,
+                answer: payload.answer
+              });
+            }
+          } catch (parseErr) {
+            // ignore partial JSON parse error
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      return;
+    }
+    callbacks.onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 

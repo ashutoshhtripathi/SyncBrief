@@ -722,12 +722,12 @@ class WhatChangedResponse(BaseModel):
     window_start: str
     window_end: str
     is_weekend_lookback: bool = False
-    team_scope: TeamScopeInfo
-    progress: ProgressDeltaSection
-    blockers: BlockersDeltaSection
-    risks: List[RiskItem] = []
-    needs_manager_attention: List[AttentionItem] = []
-    insufficient_data: InsufficientDataInfo
+    team_scope: TeamScopeInfo = Field(default_factory=lambda: TeamScopeInfo(manager_id=0, manager_name="Manager"))
+    progress: ProgressDeltaSection = Field(default_factory=ProgressDeltaSection)
+    blockers: BlockersDeltaSection = Field(default_factory=BlockersDeltaSection)
+    risks: List[RiskItem] = Field(default_factory=list)
+    needs_manager_attention: List[AttentionItem] = Field(default_factory=list)
+    insufficient_data: InsufficientDataInfo = Field(default_factory=InsufficientDataInfo)
 
 # --- Performance History & Intelligence Schemas (Phase 5) ---
 class QuarterPerformanceDetail(BaseModel):

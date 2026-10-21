@@ -192,7 +192,7 @@ export const CheckinPage: React.FC = () => {
     setSelectedSyncUsers(["Vikram Joshi", "James Wilson"]);
     setBlockers("PR #184 Auth API is blocked waiting for database migration script from the backend team.");
     setMood(2);
-    setPrLink("https://github.com/microsoft/SyncBrief/pull/184");
+    setPrLink("https://github.com/ashutoshhtripathi/SyncBrief/pull/184");
     setWorkItemId("ADO-4820");
   };
 
@@ -206,7 +206,7 @@ export const CheckinPage: React.FC = () => {
     setSelectedSyncUsers(["Elena Rostova"]);
     setBlockers("None. On track for delivery this afternoon.");
     setMood(5);
-    setPrLink("https://github.com/microsoft/SyncBrief/pull/186");
+    setPrLink("https://github.com/ashutoshhtripathi/SyncBrief/pull/186");
     setWorkItemId("ADO-4825");
   };
 

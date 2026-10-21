@@ -288,7 +288,7 @@ def test_mock_provider_analyze_what_changed_output(db):
                 "progress_delta_pct": 25,
                 "current_progress_pct": 75,
                 "note": "Cypress test suites ready",
-                "pr_link": "https://github.com/microsoft/SyncBrief/pull/184"
+                "pr_link": "https://github.com/ashutoshhtripathi/SyncBrief/pull/184"
             }
         ],
         "sprint_info": {

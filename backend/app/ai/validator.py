@@ -85,7 +85,7 @@ class CitationValidator:
     def create_hallucination_demo_blocker(cls) -> Dict[str, Any]:
         """
         Creates a deliberately hallucinated citation sample for demonstration and unit testing.
-        Judges and developers can see how the validator catches fake messages.
+        Auditors and developers can see how the validator catches fake messages.
         """
         return {
             "summary": "Kubernetes staging deployment delayed due to fake DNS outage",

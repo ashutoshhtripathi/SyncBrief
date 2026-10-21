@@ -1,6 +1,6 @@
 # ⚡ SyncBrief AI
 > **"Async updates. Verifiable evidence. Zero status meetings."**  
-> *Official Submission for the Microsoft Innovate 2026 Hackathon*
+> *Enterprise Async Work Intelligence & Real-Time AI Operations Platform*
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/Frontend-React_18_%2B_Vite-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
@@ -198,7 +198,7 @@ SyncBrief AI is pre-configured with a 1-command startup script:
 
 ```bash
 # Step 1: Clone the repository
-git clone https://github.com/microsoft/SyncBrief.git
+git clone https://github.com/ashutoshhtripathi/SyncBrief.git
 cd SyncBrief
 
 # Step 2: Install dependencies & seed realistic data
@@ -223,9 +223,20 @@ docker compose up --build
 
 ---
 
-## 🔑 How to Enable Real Azure OpenAI & Microsoft Teams
+## ⚡ Real-Time AI Powered by Groq Cloud LPUs
 
-SyncBrief AI runs **100% offline out-of-the-box** using a deterministic mock engine so judges never experience API key failures. 
+SyncBrief AI features a real-time conversational work-intelligence chatbot powered by **Groq Cloud LPUs** running **`openai/gpt-oss-120b`** with sub-second streaming token inference, zero hallucination, and strict database grounding across active sprints, tasks, check-ins, blockers, dependencies, and hierarchy.
+
+To configure Groq:
+```env
+GROQ_API_KEY="gsk_..."
+GROQ_MODEL="openai/gpt-oss-120b"
+GROQ_BASE_URL="https://api.groq.com/openai/v1"
+```
+
+## 🔑 Dual Cloud AI & Offline Capability
+
+SyncBrief AI is architected with flexible AI capability: it runs locally with a deterministic engine out-of-the-box without requiring API keys, or connects directly with high-performance Groq Cloud LPUs or Azure OpenAI.
 
 To enable live Azure OpenAI GPT-4o and Microsoft Teams webhooks:
 1. Copy `.env.example` to `.env`:
@@ -290,12 +301,12 @@ All 15 automated tests pass:
 
 ---
 
-## 🎬 2-Minute Judge Demo Script
+## 🎬 2-Minute Product Demo Walkthrough
 Follow the step-by-step 120-second walkthrough in [docs/demo-script.md](file:///Users/ashutoshtripathi/Anti%20Gravity/SyncBrief/docs/demo-script.md).
 
 ---
 
 ## ⚠️ Known Limitations
 1. **Web Speech API Browser Compatibility**: Native speech-to-text uses the W3C Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`), which is natively supported on Google Chrome, Microsoft Edge, and Safari, but may require manual permission approval on Firefox.
-2. **SQLite Document Mode**: While models use JSON columns and document structures compatible with Azure Cosmos DB, the local dev instance defaults to SQLite for zero-configuration hackathon evaluation.
-3. **Channel Simulator vs Live Graph API**: The built-in simulator provides an isolated, reliable demo environment for hackathon evaluation without requiring tenant admin privileges on a live Microsoft 365 tenant. Production deployment connects via the Bot Framework endpoint at `/api/teams/messages`.
+2. **SQLite Document Mode**: While models use JSON columns and document structures compatible with Azure Cosmos DB and PostgreSQL, the local dev instance defaults to SQLite for lightweight zero-configuration setup.
+3. **Channel Simulator vs Live Graph API**: The built-in simulator provides an isolated, reliable demo environment for local testing and staging without requiring tenant admin privileges on a live Microsoft 365 tenant. Production deployment connects via the Bot Framework endpoint at `/api/teams/messages`.

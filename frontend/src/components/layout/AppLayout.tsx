@@ -391,7 +391,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-700 dark:text-slate-300">SyncBrief AI</span>
             <span>&bull;</span>
-            <span>Enterprise Async Operations &bull; Microsoft Innovate 2026</span>
+            <span>Enterprise Async Work Intelligence &bull; Real-Time Operations</span>
           </div>
           <div className="text-[11px] text-slate-400">
             Async updates. Verifiable evidence. Zero status meetings.

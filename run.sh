@@ -2,7 +2,7 @@
 set -e
 
 echo "=========================================================="
-echo "⚡ Starting SyncBrief AI (Microsoft Innovate 2026 Hackathon)"
+echo "⚡ Starting SyncBrief AI (Enterprise Work Intelligence Platform)"
 echo "   Tagline: Async updates. Verifiable evidence. Zero status meetings."
 echo "=========================================================="
 

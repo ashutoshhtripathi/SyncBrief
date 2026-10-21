@@ -31,7 +31,7 @@ SyncBrief AI is built on a decoupled **Client-Server-Agentic** architecture opti
 | **Python 3.14 & FastAPI** | Core API Framework | High-throughput asynchronous ASGI web framework. Automatic interactive OpenAPI (`/docs`) generation, native Python type hints, and low latency for LLM streaming and JSON serialization. |
 | **Pydantic v2** | Data Validation & Schemas | Rust-powered schema validation that ensures strict API request/response hygiene, eliminates invalid data entering models, and compiles fast JSON payloads. |
 | **SQLAlchemy 2.0 ORM** | Object-Relational Mapping | Standard enterprise ORM providing clean relationship mapping (`User`, `Sprint`, `Task`, `Checkin`, `Blocker`, `Citation`) and robust query composition for hierarchy traversal. |
-| **SQLite (Production-Ready File DB)** | Persistence Engine | Zero-dependency, self-contained, ACID-compliant database ideal for hackathon evaluation, local Docker builds, and deterministic test suites. Directly migratable to Azure PostgreSQL or Azure Cosmos DB via connection string change. |
+| **SQLite (Production-Ready File DB)** | Persistence Engine | Zero-dependency, self-contained, ACID-compliant database ideal for rapid local development, Docker deployments, and deterministic test suites. Directly migratable to Azure PostgreSQL or Azure Cosmos DB via connection string change. |
 | **Pytest & TestClient** | Automated Testing | High-speed test harness validating 100% of hierarchy access control (403 Forbidden on peers/superiors), sprint carry-over mathematics, and citation validator accuracy. |
 | **BCrypt** | Credential Hashing | Secure, salted password hashing directly executed via Python's native bcrypt engine, safeguarding against timing and collision attacks. |
 

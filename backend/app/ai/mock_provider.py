@@ -572,6 +572,29 @@ class MockProvider(AIProvider):
             elif "performance" in last_bot_turn.lower() or "points" in last_bot_turn.lower():
                 last_topic = "performance"
 
+        # 0. WHAT CHANGED / YESTERDAY
+        if intent == "what_changed":
+            checkins = context_data.get("checkins", [])
+            tasks = context_data.get("tasks", [])
+            blockers = context_data.get("blockers", [])
+            completed = [t for t in tasks if t.get("status") == "completed"]
+
+            lines = ["Here are the key changes and updates recorded since yesterday:"]
+            if completed:
+                lines.append(f"\n• Completed Deliverables:\n  - **{completed[0].get('title')}** (Owner: {completed[0].get('owner')})")
+            if checkins:
+                lines.append("\n• Standup Updates:")
+                for c in checkins[:3]:
+                    lines.append(f"  - **{c.get('user_name')}**: {c.get('yesterday')}")
+            if blockers:
+                lines.append(f"\n• Active Blockers:\n  - **{blockers[0].get('summary')}** (Owner: {blockers[0].get('owner_name')}, Blocked by: {blockers[0].get('blocked_by')})")
+
+            return {
+                "answer": "\n".join(lines),
+                "citations": [c for c in citations if c.get("source_type") in ["checkin", "task"]][:2],
+                "insufficient_data": False
+            }
+
         # 1. BLOCKERS
         if intent == "blockers" or (is_followup and last_topic == "blockers"):
             blockers = context_data.get("blockers", [])
@@ -601,7 +624,7 @@ class MockProvider(AIProvider):
 
             return {
                 "answer": ans,
-                "citations": citations,
+                "citations": [c for c in citations if c.get("source_type") == "blocker"][:2],
                 "insufficient_data": False
             }
 
@@ -639,7 +662,7 @@ class MockProvider(AIProvider):
 
             return {
                 "answer": ans,
-                "citations": citations,
+                "citations": [c for c in citations if c.get("source_type") == "dependency"][:2],
                 "insufficient_data": False
             }
 
@@ -700,7 +723,7 @@ class MockProvider(AIProvider):
 
             return {
                 "answer": ans,
-                "citations": citations,
+                "citations": [c for c in citations if c.get("source_type") == "goal"][:2],
                 "insufficient_data": False
             }
 
@@ -745,7 +768,7 @@ class MockProvider(AIProvider):
 
             return {
                 "answer": ans,
-                "citations": citations,
+                "citations": [c for c in citations if c.get("source_type") == "task"][:2],
                 "insufficient_data": False
             }
 

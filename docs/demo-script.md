@@ -1,5 +1,5 @@
-# ⏱️ SyncBrief AI — 2-Minute Judge Demo Script
-**Microsoft Innovate 2026 Hackathon**
+# ⏱️ SyncBrief AI — 2-Minute Product Demo Walkthrough
+**Enterprise Async Work Intelligence & Real-Time Operations**
 *Tagline: "Async updates. Verifiable evidence. Zero status meetings."*
 
 ---
@@ -16,7 +16,7 @@
 ### **0:00 – 0:25 | The Hook & Landing Page**
 1. **Show Landing Page**:
    - Highlight the tagline: *"Async updates. Verifiable evidence. Zero status meetings."*
-   - Point out the Microsoft Innovate 2026 badge and the offline-first **"Demo AI (Offline)"** badge (explaining that SyncBrief works 100% offline out-of-the-box or with live Azure OpenAI GPT-4o).
+   - Point out the platform status badge and the AI capability mode (explaining that SyncBrief works 100% offline out-of-the-box or with live Groq Cloud LPUs and Azure OpenAI).
 2. **Click "Try Live Demo as Manager"** or the top navigation bar.
 
 ---
@@ -24,7 +24,7 @@
 ### **0:25 – 0:50 | The 60-Second Async Check-in (Hero Feature)**
 1. Navigate to **Check-in** (`/checkin`).
 2. Show the **1-click Role Switcher** in the top navbar: *"Switch to Priya Sharma (Senior Frontend Engineer)"*.
-3. Click the judge helper button: **"Fill Hero Scenario (PR #184 Blocker)"**:
+3. Click the quick scenario helper button: **"Fill Hero Scenario (PR #184 Blocker)"**:
    - *Yesterday*: Completed OAuth frontend flow & token refresh handler.
    - *Today*: Testing tenant login endpoints.
    - *Blocker*: PR #184 Auth API is blocked waiting for database migration script from the backend team.

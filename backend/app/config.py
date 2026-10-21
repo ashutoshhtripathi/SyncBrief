@@ -5,12 +5,17 @@ from typing import Optional
 class Settings(BaseSettings):
     PROJECT_NAME: str = "SyncBrief AI"
     API_V1_STR: str = "/api"
-    SECRET_KEY: str = "syncbrief-secret-key-innovate2026-demo-mode-token"
+    SECRET_KEY: str = "syncbrief-secret-key-enterprise-production-token"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
     # SQLite by default, cosmos DB / postgres compatible via SQLAlchemy URI
     DATABASE_URL: str = "sqlite:///./syncbrief.db"
+
+    # Groq Cloud AI (Real-Time Ultra-Fast Inference)
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    GROQ_BASE_URL: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 
     # Azure OpenAI
     AZURE_OPENAI_ENDPOINT: Optional[str] = os.getenv("AZURE_OPENAI_ENDPOINT", "")
@@ -24,7 +29,7 @@ class Settings(BaseSettings):
     TEAMS_APP_PASSWORD: Optional[str] = os.getenv("TEAMS_APP_PASSWORD", "")
 
     # Azure DevOps
-    AZURE_DEVOPS_ORG: str = os.getenv("AZURE_DEVOPS_ORG", "contoso-innovate")
+    AZURE_DEVOPS_ORG: str = os.getenv("AZURE_DEVOPS_ORG", "contoso-workspace")
     AZURE_DEVOPS_PROJECT: str = os.getenv("AZURE_DEVOPS_PROJECT", "SyncBrief-Core")
     AZURE_DEVOPS_PAT: Optional[str] = os.getenv("AZURE_DEVOPS_PAT", "")
 

@@ -162,7 +162,7 @@ def test_hallucination_detection(
     db: Session = Depends(get_db)
 ):
     """
-    Judge & demo tool: Injects a deliberate hallucinated citation test case
+    Demo & verification tool: Injects a deliberate hallucinated citation test case
     and runs the strict CitationValidator to demonstrate rejection.
     """
     demo_data = CitationValidator.create_hallucination_demo_blocker()
